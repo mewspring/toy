@@ -38,7 +38,7 @@ func (c *compiler) pre(pkg *packages.Package) bool {
 // post is invoked in post-order traversal of the import graph.
 func (c *compiler) post(pkg *packages.Package) {
 	fmt.Println("post:", pkg.Name)
-	gen := c.newGenerator()
+	gen := c.newGenerator(pkg)
 	gen.resolveTypeDefs(pkg)
 	gen.indexPackage(pkg)
 	gen.compilePackage(pkg)
@@ -81,7 +81,9 @@ func (gen *generator) compileFuncDecl(old *ast.FuncDecl) {
 		return
 	}
 	fgen := gen.newFuncGen(f)
-	fgen.compileBlockStmt(old.Body)
+	if old.Body != nil {
+		fgen.lowerBlockStmt(old.Body)
+	}
 }
 
 // compileGenDecl compiles the given generic declaration.

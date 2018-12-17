@@ -5,6 +5,7 @@ import (
 
 	"github.com/llir/llvm/ir"
 	"github.com/llir/llvm/ir/types"
+	"golang.org/x/tools/go/packages"
 )
 
 // generator keeps track of top-level entities when translating from AST to IR
@@ -12,6 +13,8 @@ import (
 type generator struct {
 	// Compiler for tracking errors.
 	c *compiler
+	// Go package being compiled.
+	pkg *packages.Package
 	// LLVM IR module being generated.
 	m *ir.Module
 	// index of AST top-level entities.
@@ -22,9 +25,10 @@ type generator struct {
 
 // newGenerator returns a new generator for translating an LLVM IR module from
 // AST to IR representation.
-func (c *compiler) newGenerator() *generator {
+func (c *compiler) newGenerator(pkg *packages.Package) *generator {
 	gen := &generator{
-		m: &ir.Module{},
+		pkg: pkg,
+		m:   &ir.Module{},
 		old: oldIndex{
 			typeDefs: make(map[string]ast.Expr),
 			globals:  make(map[string]*ast.GenDecl),

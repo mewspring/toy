@@ -201,13 +201,48 @@ func (gen *generator) irBasicType(goType *gotypes.Basic) types.Type {
 	case gotypes.UnsafePointer:
 		return types.NewInt(cpuWordSize)
 	// types for untyped values
-	//case gotypes.UntypedBool:
-	//case gotypes.UntypedInt:
-	//case gotypes.UntypedRune:
-	//case gotypes.UntypedFloat:
-	//case gotypes.UntypedComplex:
-	//case gotypes.UntypedString:
-	//case gotypes.UntypedNil:
+	case gotypes.UntypedBool:
+		return types.I1
+	case gotypes.UntypedInt:
+		untypedInt := types.NewInt(64)
+		untypedInt.SetName("untyped_int")
+		gen.new.typeDefs["untyped_int"] = untypedInt
+		return untypedInt
+	case gotypes.UntypedRune:
+		untypedRune := types.NewInt(32)
+		untypedRune.SetName("untyped_rune")
+		gen.new.typeDefs["untyped_rune"] = untypedRune
+		return untypedRune
+	case gotypes.UntypedFloat:
+		untypedFloat := &types.FloatType{Kind: types.FloatKindDouble}
+		untypedFloat.SetName("untyped_float")
+		gen.new.typeDefs["untyped_float"] = untypedFloat
+		return untypedFloat
+	case gotypes.UntypedComplex:
+		untypedFloat := &types.FloatType{Kind: types.FloatKindDouble}
+		untypedFloat.SetName("untyped_float")
+		var (
+			realType    = untypedFloat
+			complexType = untypedFloat
+		)
+		untypedComplex := types.NewStruct(realType, complexType)
+		untypedComplex.SetName("untyped_complex")
+		gen.new.typeDefs["untyped_complex"] = untypedComplex
+		return untypedComplex
+	case gotypes.UntypedString:
+		var (
+			dataType = types.NewPointer(types.I8)
+			lenType  = types.I64
+		)
+		untypedString := types.NewStruct(dataType, lenType)
+		untypedString.SetName("untyped_string")
+		gen.new.typeDefs["untyped_string"] = untypedString
+		return untypedString
+	case gotypes.UntypedNil:
+		untypedNil := types.NewPointer(types.I8)
+		untypedNil.SetName("untyped_nil")
+		gen.new.typeDefs["untyped_nil"] = untypedNil
+		return untypedNil
 	default:
 		panic(fmt.Errorf("support for basic type of kind %v not yet implemented", goType.Kind()))
 	}

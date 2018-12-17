@@ -47,7 +47,6 @@ func (c *compiler) newGenerator(pkg *packages.Package) *generator {
 	intType := types.NewInt(64)
 	intType.SetName("int")
 	gen.new.typeDefs["int"] = intType
-	gen.m.NewTypeDef("int", intType)
 
 	// string
 	stringType := types.NewStruct(
@@ -58,7 +57,6 @@ func (c *compiler) newGenerator(pkg *packages.Package) *generator {
 	)
 	stringType.SetName("string")
 	gen.new.typeDefs["string"] = stringType
-	gen.m.NewTypeDef("string", stringType)
 
 	return gen
 }

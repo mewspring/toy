@@ -5,6 +5,8 @@ import (
 	"go/ast"
 	"log"
 
+	"github.com/rickypai/natsort"
+
 	"github.com/llir/llvm/ir"
 	"github.com/pkg/errors"
 	"golang.org/x/tools/go/packages"
@@ -45,6 +47,15 @@ func (c *compiler) post(pkg *packages.Package) {
 	gen.resolveTypeDefs(pkg)
 	gen.indexPackage(pkg)
 	gen.compilePackage(pkg)
+	var typeNames []string
+	for typeName := range gen.new.typeDefs {
+		typeNames = append(typeNames, typeName)
+	}
+	natsort.Strings(typeNames)
+	for _, typeName := range typeNames {
+		t := gen.new.typeDefs[typeName]
+		gen.m.NewTypeDef(typeName, t)
+	}
 	c.modules = append(c.modules, gen.m)
 }
 

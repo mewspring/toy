@@ -27,6 +27,7 @@ type generator struct {
 // AST to IR representation.
 func (c *compiler) newGenerator(pkg *packages.Package) *generator {
 	gen := &generator{
+		c:   c,
 		pkg: pkg,
 		m:   &ir.Module{},
 		old: oldIndex{
@@ -41,6 +42,14 @@ func (c *compiler) newGenerator(pkg *packages.Package) *generator {
 		},
 	}
 	// Add builtin types.
+
+	// int
+	intType := types.NewInt(64)
+	intType.SetName("int")
+	gen.new.typeDefs["int"] = intType
+	gen.m.NewTypeDef("int", intType)
+
+	// string
 	stringType := types.NewStruct(
 		// data
 		types.NewPointer(types.I8),
@@ -49,6 +58,8 @@ func (c *compiler) newGenerator(pkg *packages.Package) *generator {
 	)
 	stringType.SetName("string")
 	gen.new.typeDefs["string"] = stringType
+	gen.m.NewTypeDef("string", stringType)
+
 	return gen
 }
 

@@ -2,6 +2,7 @@
 package main
 
 import (
+	"bytes"
 	"flag"
 	"fmt"
 	"log"
@@ -15,7 +16,9 @@ var (
 	// dbg is a logger which logs debug messages with "toyc:" prefix to standard
 	// error.
 	dbg = log.New(os.Stderr, term.MagentaBold("toyc:")+" ", 0)
-	//dbg = log.New(ioutil.Discard, "", 0)
+	// warn is a logger which logs warning messages with "toyc:" prefix to standard
+	// error.
+	warn = log.New(os.Stderr, term.RedBold("toyc:")+" ", 0)
 )
 
 func usage() {
@@ -44,6 +47,21 @@ func main() {
 	// Compile packages.
 	c := newCompiler()
 	packages.Visit(pkgs, c.pre, c.post)
+	switch len(c.errs) {
+	case 0:
+		// no error during compilation.
+	case 1:
+		log.Fatalf("error during compilation: %v", c.errs[0])
+	default:
+		buf := &bytes.Buffer{}
+		fmt.Fprintf(buf, "%d errors during compilation:", len(c.errs))
+		for _, err := range c.errs {
+			fmt.Fprintf(buf, "\n\t%s", err)
+		}
+		log.Fatal(buf.String())
+	}
+	if len(c.errs) > 0 {
+	}
 	// Print compiled LLVM IR modules.
 	for _, m := range c.modules {
 		fmt.Println(m)

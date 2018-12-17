@@ -57,7 +57,7 @@ func (gen *generator) indexFuncDecl(old *ast.FuncDecl) {
 		panic(fmt.Errorf("support for multiple receivers not yet implemented; %q has %d receivers", funcName, len(receivers)))
 	}
 	// Return type.
-	results := gen.irParams(old.Type.Params)
+	results := gen.irParams(old.Type.Results)
 	var retType types.Type
 	switch len(results) {
 	case 0:

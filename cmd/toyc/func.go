@@ -86,8 +86,14 @@ func (gen *generator) irParams(old *ast.FieldList) []*ir.Param {
 			gen.c.errs = append(gen.c.errs, err)
 			break
 		}
-		for _, name := range oldParam.Names {
-			param := ir.NewParam(name.String(), typ)
+		if len(oldParam.Names) > 0 {
+			for _, name := range oldParam.Names {
+				param := ir.NewParam(name.String(), typ)
+				params = append(params, param)
+			}
+		} else {
+			// Unnamed parameter.
+			param := ir.NewParam("", typ)
 			params = append(params, param)
 		}
 	}

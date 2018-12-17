@@ -6,7 +6,6 @@ import (
 	"go/token"
 	gotypes "go/types"
 
-	"github.com/kr/pretty"
 	"github.com/llir/llvm/ir/types"
 	"github.com/pkg/errors"
 	"golang.org/x/tools/go/packages"
@@ -37,7 +36,6 @@ func (gen *generator) resolveTypeDefs(pkg *packages.Package) {
 		t.SetName(typeName)
 		gen.new.typeDefs[typeName] = t
 	}
-	pretty.Println("gen.old.typeDefs", gen.old.typeDefs)
 	// Translate AST type definitions to IR.
 	for typeName, oldType := range gen.old.typeDefs {
 		new := gen.new.typeDefs[typeName]
@@ -150,7 +148,67 @@ func (gen *generator) irTypeOf(expr ast.Expr) (types.Type, error) {
 // irType returns the IR type of the given Go expression.
 func (gen *generator) irType(goType gotypes.Type) (types.Type, error) {
 	switch goType := goType.(type) {
+	case *gotypes.Basic:
+		return gen.irBasicType(goType), nil
 	default:
 		panic(fmt.Errorf("support for Go type %T not yet implemented", goType))
+	}
+}
+
+// CPU word size in number of bits.
+const cpuWordSize = 64
+
+// irBasicType returns the IR type of the given Go basic type.
+func (gen *generator) irBasicType(goType *gotypes.Basic) types.Type {
+	// predeclared types
+	switch goType.Kind() {
+	case gotypes.Bool:
+		return types.I1
+	case gotypes.Int, gotypes.Uint:
+		return types.NewInt(cpuWordSize)
+	case gotypes.Int8, gotypes.Uint8:
+		return types.I8
+	case gotypes.Int16, gotypes.Uint16:
+		return types.I16
+	case gotypes.Int32, gotypes.Uint32:
+		return types.I32
+	case gotypes.Int64, gotypes.Uint64:
+		return types.I64
+	case gotypes.Uintptr:
+		return types.NewInt(cpuWordSize)
+	case gotypes.Float32:
+		return types.Float
+	case gotypes.Float64:
+		return types.Double
+	case gotypes.Complex64:
+		var (
+			realType    = types.Float
+			complexType = types.Float
+		)
+		return types.NewStruct(realType, complexType)
+	case gotypes.Complex128:
+		var (
+			realType    = types.Double
+			complexType = types.Double
+		)
+		return types.NewStruct(realType, complexType)
+	case gotypes.String:
+		var (
+			dataType = types.NewPointer(types.I8)
+			lenType  = types.I64
+		)
+		return types.NewStruct(dataType, lenType)
+	case gotypes.UnsafePointer:
+		return types.NewInt(cpuWordSize)
+	// types for untyped values
+	//case gotypes.UntypedBool:
+	//case gotypes.UntypedInt:
+	//case gotypes.UntypedRune:
+	//case gotypes.UntypedFloat:
+	//case gotypes.UntypedComplex:
+	//case gotypes.UntypedString:
+	//case gotypes.UntypedNil:
+	default:
+		panic(fmt.Errorf("support for basic type of kind %v not yet implemented", goType.Kind()))
 	}
 }

@@ -5,6 +5,7 @@ import (
 	"go/ast"
 	"log"
 
+	"github.com/llir/llvm/ir"
 	"github.com/pkg/errors"
 	"golang.org/x/tools/go/packages"
 )
@@ -12,6 +13,8 @@ import (
 // compiler tracks the state of the compiler, including any errors encountered
 // during compilation.
 type compiler struct {
+	// Compiled LLVM IR modules.
+	modules []*ir.Module
 	// List of errors encountered during compilation.
 	errs []error
 }
@@ -31,17 +34,18 @@ func (c *compiler) Errorf(format string, args ...interface{}) {
 // pre is invoked in pre-order traversal of the import graph. The returned
 // boolean value determines whether imports of pkg are visited.
 func (c *compiler) pre(pkg *packages.Package) bool {
-	fmt.Println("pre:", pkg.Name)
+	dbg.Println("pre:", pkg.Name)
 	return true
 }
 
 // post is invoked in post-order traversal of the import graph.
 func (c *compiler) post(pkg *packages.Package) {
-	fmt.Println("post:", pkg.Name)
+	dbg.Println("post:", pkg.Name)
 	gen := c.newGenerator(pkg)
 	gen.resolveTypeDefs(pkg)
 	gen.indexPackage(pkg)
 	gen.compilePackage(pkg)
+	c.modules = append(c.modules, gen.m)
 }
 
 // compilePackage compiles the given Go package.
@@ -82,7 +86,7 @@ func (gen *generator) compileFuncDecl(old *ast.FuncDecl) {
 	}
 	fgen := gen.newFuncGen(f)
 	if old.Body != nil {
-		fgen.lowerBlockStmt(old.Body)
+		fgen.lowerFuncBody(old.Body)
 	}
 }
 

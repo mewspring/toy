@@ -27,9 +27,11 @@ func (gen *generator) newFuncGen(f *ir.Function) *funcGen {
 	}
 }
 
-// lowerBlockStmt lowers the Go block statement to LLVM IR, emitting to f.
-func (fgen *funcGen) lowerBlockStmt(old *ast.BlockStmt) {
+// lowerFuncBody lowers the Go function body block statement to LLVM IR,
+// emitting to f.
+func (fgen *funcGen) lowerFuncBody(old *ast.BlockStmt) {
 	// TODO: handle scope?
+	fgen.cur = fgen.f.NewBlock("entry")
 	for _, oldStmt := range old.List {
 		fgen.lowerStmt(oldStmt)
 	}

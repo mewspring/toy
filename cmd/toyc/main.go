@@ -7,7 +7,15 @@ import (
 	"log"
 	"os"
 
+	"github.com/mewkiz/pkg/term"
 	"golang.org/x/tools/go/packages"
+)
+
+var (
+	// dbg is a logger which logs debug messages with "toyc:" prefix to standard
+	// error.
+	dbg = log.New(os.Stderr, term.MagentaBold("toyc:")+" ", 0)
+	//dbg = log.New(ioutil.Discard, "", 0)
 )
 
 func usage() {
@@ -33,6 +41,11 @@ func main() {
 	if packages.PrintErrors(pkgs) > 0 {
 		os.Exit(1)
 	}
+	// Compile packages.
 	c := newCompiler()
 	packages.Visit(pkgs, c.pre, c.post)
+	// Print compiled LLVM IR modules.
+	for _, m := range c.modules {
+		fmt.Println(m)
+	}
 }

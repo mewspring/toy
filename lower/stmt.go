@@ -63,11 +63,16 @@ func (fgen *funcGen) lowerExprStmt(goExprStmt *ast.ExprStmt) {
 
 // lowerForStmt lowers the Go for-statement to LLVM IR, emitting to f.
 func (fgen *funcGen) lowerForStmt(goForStmt *ast.ForStmt) {
-	initBlock := ir.NewBlock("init_block")
-	condBlock := ir.NewBlock("cond_block")
-	postBlock := ir.NewBlock("post_block")
-	bodyBlock := ir.NewBlock("body_block")
-	followBlock := ir.NewBlock("follow_block")
+	//initBlock := ir.NewBlock("init_block")
+	initBlock := ir.NewBlock("")
+	//condBlock := ir.NewBlock("cond_block")
+	condBlock := ir.NewBlock("")
+	//postBlock := ir.NewBlock("post_block")
+	postBlock := ir.NewBlock("")
+	//bodyBlock := ir.NewBlock("body_block")
+	bodyBlock := ir.NewBlock("")
+	//followBlock := ir.NewBlock("follow_block")
+	followBlock := ir.NewBlock("")
 	// Initialization statement.
 	fgen.cur.NewBr(initBlock)
 	fgen.cur = initBlock

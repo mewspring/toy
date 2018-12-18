@@ -128,7 +128,7 @@ func (fgen *funcGen) lowerBinaryExpr(goExpr *ast.BinaryExpr) (value.Value, error
 			return nil, errors.Errorf("invalid operand type to '%s' binary expression; expected integer scalar or integer vector type, got %T", goExpr.Op, t)
 		}
 		// Mask.
-		mask, err := allOnesMask(y.Type())
+		mask, err := allOnes(y.Type())
 		if err != nil {
 			return nil, errors.WithStack(err)
 		}
@@ -216,7 +216,7 @@ func (fgen *funcGen) lowerUnaryExpr(goExpr *ast.UnaryExpr) (value.Value, error) 
 		// Plus prefix is optional and has no effect.
 		return x, nil
 	case token.SUB: // -
-		zero, err := allZero(t)
+		zero, err := allZeros(t)
 		if err != nil {
 			return nil, errors.WithStack(err)
 		}
@@ -227,11 +227,11 @@ func (fgen *funcGen) lowerUnaryExpr(goExpr *ast.UnaryExpr) (value.Value, error) 
 		// x ^ 1
 		return fgen.cur.NewXor(x, one), nil
 	case token.XOR: // ^
-		oneMask, err := allOnesMask(t)
+		mask, err := allOnes(t)
 		if err != nil {
 			return nil, errors.WithStack(err)
 		}
-		return fgen.cur.NewXor(x, oneMask), nil
+		return fgen.cur.NewXor(x, mask), nil
 	//case token.MUL: // *
 	//case token.AND: // &
 	//case token.ARROW: // <-
@@ -242,14 +242,16 @@ func (fgen *funcGen) lowerUnaryExpr(goExpr *ast.UnaryExpr) (value.Value, error) 
 
 // --- [ Lower expression with module generator ] ------------------------------
 
-// lowerGlobalInitExpr lowers the given Go global initialization expression to
-// LLVM IR.
+// lowerGlobalInitExpr lowers the given Go global definition initialization
+// expression to LLVM IR, emitting to m.
 func (gen *Generator) lowerGlobalInitExpr(goExpr ast.Expr) (constant.Constant, error) {
 	switch goExpr := goExpr.(type) {
 	// Constant.
 	case *ast.BasicLit:
 		return gen.lowerBasicLit(goExpr), nil
-	// Non-constant, generate init functions.
+	// Non-constant.
+	// TODO: generate init functions for non-constant initializers (e.g. call
+	// expressions)
 	default:
 		panic(fmt.Errorf("support for global initialization expression %T not yet implemented", goExpr))
 	}
@@ -364,9 +366,9 @@ func isFloatOrFloatVectorType(t types.Type) bool {
 	}
 }
 
-// allZero returns an integer scalar or integer vector with every bit set to 0,
+// allZeros returns an integer scalar or integer vector with every bit set to 0,
 // based on the bit size of the given integer scalar or integer vector type.
-func allZero(t types.Type) (constant.Constant, error) {
+func allZeros(t types.Type) (constant.Constant, error) {
 	size, ok := bitSize(t)
 	if !ok {
 		return nil, errors.Errorf("invalid operand type; expected integer scalar or integer vector type, got %T", t)
@@ -383,31 +385,31 @@ func allZero(t types.Type) (constant.Constant, error) {
 	return zero, nil
 }
 
-// allOnesMask returns an integer scalar or integer vector mask with every bit
-// set to 1, based on the bit size of the given integer scalar or integer vector
+// allOnes returns an integer scalar or integer vector mask with every bit set
+// to 1, based on the bit size of the given integer scalar or integer vector
 // type.
-func allOnesMask(t types.Type) (constant.Constant, error) {
+func allOnes(t types.Type) (constant.Constant, error) {
 	size, ok := bitSize(t)
 	if !ok {
-		return nil, errors.Errorf("invalid shift operand type; expected integer scalar or integer vector type, got %T", t)
+		return nil, errors.Errorf("invalid operand type; expected integer scalar or integer vector type, got %T", t)
 	}
-	maskType := types.NewInt(size)
-	var maskValue int64
+	elemType := types.NewInt(size)
+	var x int64
 	for i := int64(0); i < int64(size); i++ {
 		if i != 0 {
-			maskValue <<= 1
+			x <<= 1
 		}
-		maskValue |= 1
+		x |= 1
 	}
-	mask := constant.NewInt(maskType, maskValue)
+	elem := constant.NewInt(elemType, x)
 	if t, ok := t.(*types.VectorType); ok {
 		elems := make([]constant.Constant, t.Len)
 		for i := range elems {
-			elems[i] = mask
+			elems[i] = elem
 		}
 		return constant.NewVector(elems...), nil
 	}
-	return mask, nil
+	return elem, nil
 }
 
 // bitSize returns the bit size of the given integer scalar or integer vector

@@ -15,16 +15,31 @@ import (
 // lowerStmt lowers the Go statement to LLVM IR, emitting to f.
 func (fgen *funcGen) lowerStmt(goStmt ast.Stmt) {
 	switch goStmt := goStmt.(type) {
+	//case *ast.AssignStmt:
 	case *ast.BlockStmt:
 		fgen.lowerBlockStmt(goStmt)
+	//case *ast.BranchStmt:
+	//case *ast.DeclStmt:
+	//case *ast.DeferStmt:
+	case *ast.EmptyStmt:
+		// nothing to do.
 	case *ast.ExprStmt:
 		fgen.lowerExprStmt(goStmt)
+	case *ast.ForStmt:
+		fgen.lowerForStmt(goStmt)
+	//case *ast.GoStmt:
 	case *ast.IfStmt:
 		fgen.lowerIfStmt(goStmt)
+	//case *ast.IncDecStmt:
+	//case *ast.LabeledStmt:
+	//case *ast.RangeStmt:
 	case *ast.ReturnStmt:
 		fgen.lowerReturnStmt(goStmt)
+	//case *ast.SelectStmt:
+	//case *ast.SendStmt:
 	case *ast.SwitchStmt:
 		fgen.lowerSwitchStmt(goStmt)
+	//case *ast.TypeSwitchStmt:
 	default:
 		panic(fmt.Errorf("support for statement %T not yet implemented", goStmt))
 	}
@@ -44,6 +59,53 @@ func (fgen *funcGen) lowerExprStmt(goExprStmt *ast.ExprStmt) {
 		fgen.gen.eh(err)
 		return
 	}
+}
+
+// lowerForStmt lowers the Go for-statement to LLVM IR, emitting to f.
+func (fgen *funcGen) lowerForStmt(goForStmt *ast.ForStmt) {
+	initBlock := ir.NewBlock("init_block")
+	condBlock := ir.NewBlock("cond_block")
+	postBlock := ir.NewBlock("post_block")
+	bodyBlock := ir.NewBlock("body_block")
+	followBlock := ir.NewBlock("follow_block")
+	// Initialization statement.
+	fgen.cur.NewBr(initBlock)
+	fgen.cur = initBlock
+	fgen.f.Blocks = append(fgen.f.Blocks, initBlock)
+	if goForStmt.Init != nil {
+		fgen.lowerStmt(goForStmt.Init)
+	}
+	// Condition.
+	fgen.cur.NewBr(condBlock)
+	fgen.cur = condBlock
+	fgen.f.Blocks = append(fgen.f.Blocks, condBlock)
+	if goForStmt.Cond != nil {
+		// Condition.
+		cond, err := fgen.lowerExpr(goForStmt.Cond)
+		if err != nil {
+			fgen.gen.eh(err)
+			return
+		}
+		fgen.cur.NewCondBr(cond, bodyBlock, followBlock)
+	} else {
+		// No condition.
+		fgen.cur.NewBr(bodyBlock)
+	}
+	// Body.
+	fgen.cur = bodyBlock
+	fgen.f.Blocks = append(fgen.f.Blocks, bodyBlock)
+	fgen.lowerStmt(goForStmt.Body)
+	// Post.
+	fgen.cur.NewBr(postBlock)
+	fgen.cur = postBlock
+	fgen.f.Blocks = append(fgen.f.Blocks, postBlock)
+	if goForStmt.Post != nil {
+		fgen.lowerStmt(goForStmt.Post)
+	}
+	fgen.cur.NewBr(condBlock)
+	// Follow.
+	fgen.cur = followBlock
+	fgen.f.Blocks = append(fgen.f.Blocks, followBlock)
 }
 
 // lowerIfStmt lowers the Go if-statement to LLVM IR, emitting to f.
@@ -138,8 +200,6 @@ func (fgen *funcGen) lowerSwitchStmt(goSwitchStmt *ast.SwitchStmt) {
 	}
 	var caseBlocks []*ir.BasicBlock
 	nextBlock := ir.NewBlock("")
-	//followBlock := ir.NewBlock("follow")
-	followBlock := ir.NewBlock("")
 	for _, goCase := range goCases {
 		if goCase.List != nil {
 			// case branches.
@@ -193,6 +253,8 @@ func (fgen *funcGen) lowerSwitchStmt(goSwitchStmt *ast.SwitchStmt) {
 		}
 	}
 	// Case bodies.
+	//followBlock := ir.NewBlock("follow")
+	followBlock := ir.NewBlock("")
 	for i, goCase := range goCases {
 		caseBlock := caseBlocks[i]
 		fgen.cur = caseBlock

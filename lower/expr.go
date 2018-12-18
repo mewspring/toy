@@ -56,7 +56,12 @@ func (gen *Generator) lowerBasicLit(old *ast.BasicLit) constant.Constant {
 			panic(fmt.Errorf("unable to parse character literal %s; %v", s, err))
 		}
 		return constant.NewInt(t, int64(val))
-	//case token.STRING:
+	case token.STRING:
+		s, err := strconv.Unquote(old.Value)
+		if err != nil {
+			panic(fmt.Errorf("unable to parse string literal %s; %v", s, err))
+		}
+		return constant.NewCharArrayFromString(s)
 	default:
 		panic(fmt.Errorf("support for literal of basic type %v not yet implemented", old.Kind))
 	}

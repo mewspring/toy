@@ -126,21 +126,28 @@ func (fgen *funcGen) lowerSwitchStmt(goSwitchStmt *ast.SwitchStmt) {
 		}
 		goCases = append(goCases, goCase)
 	}
+	// Tag.
+	var tag value.Value
 	if goSwitchStmt.Tag != nil {
-		// Tag.
-		tag, err := fgen.lowerExprUse(goSwitchStmt.Tag)
+		var err error
+		tag, err = fgen.lowerExprUse(goSwitchStmt.Tag)
 		if err != nil {
 			fgen.gen.eh(err)
 			return
 		}
-		var caseBlocks []*ir.BasicBlock
-		nextBlock := ir.NewBlock("")
-		followBlock := ir.NewBlock("") // "follow"
-		for _, goCase := range goCases {
-			if goCase.List != nil {
-				// case branches.
-				caseBlock := ir.NewBlock("") // fmt.Sprintf("case_%d", i)
-				caseBlocks = append(caseBlocks, caseBlock)
+	}
+	var caseBlocks []*ir.BasicBlock
+	nextBlock := ir.NewBlock("")
+	//followBlock := ir.NewBlock("follow")
+	followBlock := ir.NewBlock("")
+	for _, goCase := range goCases {
+		if goCase.List != nil {
+			// case branches.
+			//caseBlock := ir.NewBlock(fmt.Sprintf("case_%d", i))
+			caseBlock := ir.NewBlock("")
+			caseBlocks = append(caseBlocks, caseBlock)
+			if tag != nil {
+				// Tag.
 				for _, goExpr := range goCase.List {
 					x, err := fgen.lowerExprUse(goExpr)
 					if err != nil {
@@ -158,32 +165,48 @@ func (fgen *funcGen) lowerSwitchStmt(goSwitchStmt *ast.SwitchStmt) {
 					nextBlock = ir.NewBlock("")
 				}
 			} else {
-				// default branch.
-				caseBlock := ir.NewBlock("") // "default"
-				caseBlocks = append(caseBlocks, caseBlock)
-				fgen.cur.NewBr(caseBlock)
+				// No tag.
+				var cond value.Value
+				for _, goExpr := range goCase.List {
+					x, err := fgen.lowerExprUse(goExpr)
+					if err != nil {
+						fgen.gen.eh(err)
+						continue
+					}
+					if cond != nil {
+						cond = fgen.cur.NewOr(cond, x)
+					} else {
+						cond = x
+					}
+				}
+				fgen.cur.NewCondBr(cond, caseBlock, nextBlock)
+				fgen.cur = nextBlock
+				fgen.f.Blocks = append(fgen.f.Blocks, nextBlock)
+				nextBlock = ir.NewBlock("")
 			}
+		} else {
+			// default branch.
+			//caseBlock := ir.NewBlock("default")
+			caseBlock := ir.NewBlock("")
+			caseBlocks = append(caseBlocks, caseBlock)
+			fgen.cur.NewBr(caseBlock)
 		}
-		// Case bodies.
-		for i, goCase := range goCases {
-			caseBlock := caseBlocks[i]
-			fgen.cur = caseBlock
-			for _, goStmt := range goCase.Body {
-				fgen.lowerStmt(goStmt)
-			}
-			if fgen.cur.Term == nil {
-				fgen.cur.NewBr(followBlock)
-			}
-			fgen.f.Blocks = append(fgen.f.Blocks, caseBlock)
-		}
-		// Follow basic block.
-		fgen.cur = followBlock
-		fgen.f.Blocks = append(fgen.f.Blocks, followBlock)
-	} else {
-		// No tag.
-		// TODO: implement support for switch statement without a tag.
-		panic("support for switch statement without tag not yet implemented")
 	}
+	// Case bodies.
+	for i, goCase := range goCases {
+		caseBlock := caseBlocks[i]
+		fgen.cur = caseBlock
+		for _, goStmt := range goCase.Body {
+			fgen.lowerStmt(goStmt)
+		}
+		if fgen.cur.Term == nil {
+			fgen.cur.NewBr(followBlock)
+		}
+		fgen.f.Blocks = append(fgen.f.Blocks, caseBlock)
+	}
+	// Follow basic block.
+	fgen.cur = followBlock
+	fgen.f.Blocks = append(fgen.f.Blocks, followBlock)
 }
 
 // ### [ Helper functions ] ####################################################

@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"go/ast"
 	"go/token"
+	"strconv"
+	"strings"
 
 	"github.com/llir/llvm/ir/constant"
 	"github.com/llir/llvm/ir/enum"
@@ -14,12 +16,12 @@ import (
 
 // lowerBasicLit lowers the Go literal of basic type to LLVM IR.
 func (gen *Generator) lowerBasicLit(old *ast.BasicLit) constant.Constant {
+	typ, err := gen.irTypeOf(old)
+	if err != nil {
+		panic(fmt.Errorf("unable to locate type of expresion `%v`; %v", old, err))
+	}
 	switch old.Kind {
 	case token.INT:
-		typ, err := gen.irTypeOf(old)
-		if err != nil {
-			panic(fmt.Errorf("unable to locate type of expresion `%v`; %v", old, err))
-		}
 		t, ok := typ.(*types.IntType)
 		if !ok {
 			panic(fmt.Errorf("invalid type of integer literal; expected *types.IntType, got %T", t))
@@ -30,10 +32,6 @@ func (gen *Generator) lowerBasicLit(old *ast.BasicLit) constant.Constant {
 		}
 		return x
 	case token.FLOAT:
-		typ, err := gen.irTypeOf(old)
-		if err != nil {
-			panic(fmt.Errorf("unable to locate type of expresion `%v`; %v", old, err))
-		}
 		t, ok := typ.(*types.FloatType)
 		if !ok {
 			panic(fmt.Errorf("invalid type of integer literal; expected *types.FloatType, got %T", t))
@@ -44,7 +42,20 @@ func (gen *Generator) lowerBasicLit(old *ast.BasicLit) constant.Constant {
 		}
 		return x
 	//case token.IMAG:
-	//case token.CHAR:
+	case token.CHAR:
+		t, ok := typ.(*types.IntType)
+		if !ok {
+			panic(fmt.Errorf("invalid type of integer literal; expected *types.IntType, got %T", t))
+		}
+		s := old.Value
+		if len(s) >= 2 && strings.HasPrefix(s, "'") && strings.HasSuffix(s, "'") {
+			s = s[len("'") : len(s)-len("'")]
+		}
+		val, _, _, err := strconv.UnquoteChar(s, '\'')
+		if err != nil {
+			panic(fmt.Errorf("unable to parse character literal %s; %v", s, err))
+		}
+		return constant.NewInt(t, int64(val))
 	//case token.STRING:
 	default:
 		panic(fmt.Errorf("support for literal of basic type %v not yet implemented", old.Kind))

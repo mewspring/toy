@@ -53,7 +53,9 @@ func (fgen *funcGen) lowerIfStmt(goStmt *ast.IfStmt) {
 	targetTrue := fgen.f.NewBlock("")
 	fgen.cur = targetTrue
 	fgen.lowerStmt(goStmt.Body)
-	fgen.cur.NewBr(followBlock)
+	if fgen.cur.Term == nil {
+		fgen.cur.NewBr(followBlock)
+	}
 	// The follow branch is used as the false branch when no else-branch is
 	// present.
 	targetFalse := followBlock
@@ -62,7 +64,9 @@ func (fgen *funcGen) lowerIfStmt(goStmt *ast.IfStmt) {
 		targetFalse = fgen.f.NewBlock("")
 		fgen.cur = targetFalse
 		fgen.lowerStmt(goStmt.Else)
-		fgen.cur.NewBr(followBlock)
+		if fgen.cur.Term == nil {
+			fgen.cur.NewBr(followBlock)
+		}
 	}
 	// Add terminator to condition basic block.
 	condBlock.NewCondBr(cond, targetTrue, targetFalse)

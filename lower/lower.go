@@ -100,7 +100,6 @@ func (gen *Generator) lowerFuncDecl(old *ast.FuncDecl) {
 	funcName := old.Name.String()
 	// Function scope.
 	funcScope := gen.scope.Innermost(old.Name.Pos())
-	fmt.Printf("funcScope: %T\n", funcScope)
 	fgen.scope = funcScope
 	// Receiver.
 	receivers := gen.irParams(old.Recv)
@@ -191,10 +190,14 @@ func (gen *Generator) lowerValueSpec(old *ast.ValueSpec) {
 	}
 }
 
-// lowerGlobalInit lowers the given Go global initialization expression to LLVM
-// IR.
+// lowerGlobalInitExpr lowers the given Go global initialization expression to
+// LLVM IR.
 func (gen *Generator) lowerGlobalInitExpr(old ast.Expr) (constant.Constant, error) {
 	switch old := old.(type) {
+	// Constant.
+	case *ast.BasicLit:
+		return gen.lowerBasicLit(old), nil
+	// Non-constant, generate init functions.
 	default:
 		panic(fmt.Errorf("support for global initialization expression %T not yet implemented", old))
 	}

@@ -12,42 +12,11 @@ import (
 	"github.com/pkg/errors"
 )
 
-// lowerExpr lowers the Go expression to LLVM IR, emitting to m.
-func (gen *Generator) lowerExpr(old ast.Expr) (value.Value, error) {
-	switch old := old.(type) {
-	default:
-		panic(fmt.Errorf("support for expression %T not yet implemented", old))
-	}
-}
-
-// lowerExpr lowers the Go expression to LLVM IR, emitting to f.
-func (fgen *funcGen) lowerExpr(old ast.Expr) (value.Value, error) {
-	switch old := old.(type) {
-	case *ast.BasicLit:
-		return fgen.lowerBasicLit(old), nil
-	case *ast.BinaryExpr:
-		return fgen.lowerBinaryExpr(old)
-	case *ast.CallExpr:
-		return fgen.lowerCallExpr(old)
-	case *ast.Ident:
-		name := old.String()
-		if f, ok := fgen.gen.new.funcs[name]; ok {
-			return f, nil
-		}
-		if v, ok := fgen.gen.new.globals[name]; ok {
-			return v, nil
-		}
-		return nil, errors.Errorf("unable to locate top-level definition of identifier %q", name)
-	default:
-		panic(fmt.Errorf("support for expression %T not yet implemented", old))
-	}
-}
-
 // lowerBasicLit lowers the Go literal of basic type to LLVM IR.
-func (fgen *funcGen) lowerBasicLit(old *ast.BasicLit) value.Value {
+func (gen *Generator) lowerBasicLit(old *ast.BasicLit) constant.Constant {
 	switch old.Kind {
 	case token.INT:
-		typ, err := fgen.gen.irTypeOf(old)
+		typ, err := gen.irTypeOf(old)
 		if err != nil {
 			panic(fmt.Errorf("unable to locate type of expresion `%v`; %v", old, err))
 		}
@@ -66,6 +35,29 @@ func (fgen *funcGen) lowerBasicLit(old *ast.BasicLit) value.Value {
 	//case token.STRING:
 	default:
 		panic(fmt.Errorf("support for literal of basic type %v not yet implemented", old.Kind))
+	}
+}
+
+// lowerExpr lowers the Go expression to LLVM IR, emitting to f.
+func (fgen *funcGen) lowerExpr(old ast.Expr) (value.Value, error) {
+	switch old := old.(type) {
+	case *ast.BasicLit:
+		return fgen.gen.lowerBasicLit(old), nil
+	case *ast.BinaryExpr:
+		return fgen.lowerBinaryExpr(old)
+	case *ast.CallExpr:
+		return fgen.lowerCallExpr(old)
+	case *ast.Ident:
+		name := old.String()
+		if f, ok := fgen.gen.new.funcs[name]; ok {
+			return f, nil
+		}
+		if v, ok := fgen.gen.new.globals[name]; ok {
+			return v, nil
+		}
+		return nil, errors.Errorf("unable to locate top-level definition of identifier %q", name)
+	default:
+		panic(fmt.Errorf("support for expression %T not yet implemented", old))
 	}
 }
 

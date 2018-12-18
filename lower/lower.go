@@ -4,7 +4,6 @@ package lower
 import (
 	"fmt"
 	"go/ast"
-	"log"
 
 	"github.com/llir/llvm/ir"
 	"github.com/llir/llvm/ir/types"
@@ -37,7 +36,7 @@ func NewGenerator(eh func(error), pkg *packages.Package) *Generator {
 		m:   ir.NewModule(),
 		old: oldIndex{
 			typeDefs: make(map[string]ast.Expr),
-			globals:  make(map[string]*ast.GenDecl),
+			globals:  make(map[string]*ast.ValueSpec),
 			funcs:    make(map[string]*ast.FuncDecl),
 		},
 		new: newIndex{
@@ -124,7 +123,29 @@ func (gen *Generator) lowerFuncDecl(old *ast.FuncDecl) {
 
 // lowerGenDecl lowers the given Go generic declaration to LLVM IR.
 func (gen *Generator) lowerGenDecl(old *ast.GenDecl) {
-	log.Printf("support for top-level declaration %T not yet implemented", old)
+	for _, oldSpec := range old.Specs {
+		gen.lowerSpec(oldSpec)
+	}
+}
+
+// lowerSpec lowers the given Go specifier to LLVM IR, emitting to m.
+func (gen *Generator) lowerSpec(old ast.Spec) {
+	switch old := old.(type) {
+	case *ast.TypeSpec:
+		// handled by resolveTypeDefs.
+	case *ast.ValueSpec:
+		gen.lowerValueSpec(old)
+	default:
+		panic(fmt.Errorf("support for specifier %T not yet implemented", old))
+	}
+}
+
+// lowerGenDecl lowers the given Go variable declaration to LLVM IR.
+func (gen *Generator) lowerValueSpec(old *ast.ValueSpec) {
+	for _, oldName := range old.Names {
+		name := oldName.String()
+		gen.old.globals[name] = old
+	}
 }
 
 // oldIndex is an index of AST top-level entities.
@@ -132,7 +153,7 @@ type oldIndex struct {
 	// typeDefs maps from type identifier to the underlying type definition.
 	typeDefs map[string]ast.Expr // Go type
 	// globals maps from global identifier to global declarations and defintions.
-	globals map[string]*ast.GenDecl
+	globals map[string]*ast.ValueSpec
 	// funcs maps from global identifier to function declarations and defintions.
 	funcs map[string]*ast.FuncDecl
 }

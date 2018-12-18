@@ -91,6 +91,11 @@ func (gen *Generator) indexSpec(old ast.Spec) {
 	switch old := old.(type) {
 	case *ast.TypeSpec:
 		gen.old.typeDefs[old.Name.String()] = old.Type
+	case *ast.ValueSpec:
+		for _, oldName := range old.Names {
+			name := oldName.String()
+			gen.old.globals[name] = old
+		}
 	default:
 		panic(fmt.Errorf("support for specifier %T not yet implemented", old))
 	}

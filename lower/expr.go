@@ -77,15 +77,9 @@ func (fgen *funcGen) lowerExpr(old ast.Expr) (value.Value, error) {
 	case *ast.CallExpr:
 		return fgen.lowerCallExpr(old)
 	case *ast.Ident:
-		name := old.String()
-		if f, ok := fgen.gen.new.funcs[name]; ok {
-			return f, nil
-		}
-		if mem, ok := fgen.gen.new.globals[name]; ok {
-			v := fgen.cur.NewLoad(mem)
-			return v, nil
-		}
-		return nil, errors.Errorf("unable to locate top-level definition of identifier %q", name)
+		return fgen.lowerIdentExpr(old)
+	case *ast.UnaryExpr:
+		return fgen.lowerUnaryExpr(old)
 	default:
 		panic(fmt.Errorf("support for expression %T not yet implemented", old))
 	}
@@ -247,6 +241,56 @@ func (fgen *funcGen) lowerCallExpr(old *ast.CallExpr) (value.Value, error) {
 	return fgen.cur.NewCall(callee, args...), nil
 }
 
+// lowerIdentExpr lowers the Go identifier expression to LLVM IR, emitting to f.
+func (fgen *funcGen) lowerIdentExpr(old *ast.Ident) (value.Value, error) {
+	name := old.String()
+	if f, ok := fgen.gen.new.funcs[name]; ok {
+		return f, nil
+	}
+	if mem, ok := fgen.gen.new.globals[name]; ok {
+		v := fgen.cur.NewLoad(mem)
+		return v, nil
+	}
+	return nil, errors.Errorf("unable to locate top-level definition of identifier %q", name)
+}
+
+// lowerBinaryExpr lowers the Go binary expression to LLVM IR, emitting to f.
+func (fgen *funcGen) lowerUnaryExpr(old *ast.UnaryExpr) (value.Value, error) {
+	x, err := fgen.lowerExpr(old.X)
+	if err != nil {
+		return nil, errors.WithStack(err)
+	}
+	t := x.Type()
+	switch old.Op {
+	// Unary operations.
+	case token.ADD: // +
+		// Plus prefix is optional and has no effect.
+		return x, nil
+	case token.SUB: // -
+		zero, err := allZero(t)
+		if err != nil {
+			return nil, errors.WithStack(err)
+		}
+		// 0 - x
+		return fgen.cur.NewSub(zero, x), nil
+	case token.NOT: // !
+		one := constant.True
+		// x ^ 1
+		return fgen.cur.NewXor(x, one), nil
+	case token.XOR: // ^
+		oneMask, err := allOnesMask(t)
+		if err != nil {
+			return nil, errors.WithStack(err)
+		}
+		return fgen.cur.NewXor(x, oneMask), nil
+	//case token.MUL: // *
+	//case token.AND: // &
+	//case token.ARROW: // <-
+	default:
+		panic(fmt.Errorf("support for '%s' unary expression not yet implemented", old.Op))
+	}
+}
+
 // ### [ Helper functions ] ####################################################
 
 // lowerExprs lowers the given Go expressions to LLVM IR, emitting to f.
@@ -288,6 +332,25 @@ func isFloatOrFloatVectorType(t types.Type) bool {
 	default:
 		return false
 	}
+}
+
+// allZero returns an integer scalar or integer vector with every bit set to 0,
+// based on the bit size of the given integer scalar or integer vector type.
+func allZero(t types.Type) (constant.Constant, error) {
+	size, ok := bitSize(t)
+	if !ok {
+		return nil, errors.Errorf("invalid operand type; expected integer scalar or integer vector type, got %T", t)
+	}
+	elemType := types.NewInt(size)
+	zero := constant.NewInt(elemType, 0)
+	if t, ok := t.(*types.VectorType); ok {
+		elems := make([]constant.Constant, t.Len)
+		for i := range elems {
+			elems[i] = zero
+		}
+		return constant.NewVector(elems...), nil
+	}
+	return zero, nil
 }
 
 // allOnesMask returns an integer scalar or integer vector mask with every bit

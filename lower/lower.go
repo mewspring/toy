@@ -4,6 +4,7 @@ package lower
 import (
 	"fmt"
 	"go/ast"
+	gotypes "go/types"
 
 	"github.com/llir/llvm/ir"
 	"github.com/llir/llvm/ir/types"
@@ -18,10 +19,12 @@ type Generator struct {
 	eh func(error)
 	// Go package being compiled.
 	pkg *packages.Package
+	// Package scope.
+	scope *gotypes.Scope
+	// Current child scope.
+	curChildScope int
 	// LLVM IR module being generated.
 	m *ir.Module
-	// index of Go AST top-level entities.
-	old oldIndex
 	// index of LLVM IR top-level entities.
 	new newIndex
 }
@@ -31,42 +34,23 @@ type Generator struct {
 // error is encountered during compilation.
 func NewGenerator(eh func(error), pkg *packages.Package) *Generator {
 	gen := &Generator{
-		eh:  eh,
-		pkg: pkg,
-		m:   ir.NewModule(),
-		old: oldIndex{
-			typeDefs: make(map[string]ast.Expr),
-			globals:  make(map[string]*ast.ValueSpec),
-			funcs:    make(map[string]*ast.FuncDecl),
-		},
+		eh:    eh,
+		pkg:   pkg,
+		scope: pkg.Types.Scope(),
+		m:     ir.NewModule(),
 		new: newIndex{
 			typeDefs: make(map[string]types.Type),
 			globals:  make(map[string]*ir.Global),
 			funcs:    make(map[string]*ir.Function),
 		},
 	}
-	// Add builtin types.
-	//
-	// * int
-	intType := types.NewInt(64)
-	intType.SetName("int")
-	gen.new.typeDefs["int"] = intType
-	// * string
-	stringType := types.NewStruct(
-		types.NewPointer(types.I8), // data
-		types.I64,                  // len
-	)
-	stringType.SetName("string")
-	gen.new.typeDefs["string"] = stringType
-	// TODO: add remaining built-in types of Go.
 	return gen
 }
 
 // Lower lowers the source code of the given Go package to LLVM IR.
 func (gen *Generator) Lower() *ir.Module {
-	gen.resolveTypeDefs()
-	gen.indexPackage()
 	gen.lowerPackage()
+	// Append type definitions to module.
 	var typeNames []string
 	for typeName := range gen.new.typeDefs {
 		typeNames = append(typeNames, typeName)
@@ -109,13 +93,55 @@ func (gen *Generator) lowerDecl(old ast.Decl) {
 
 // lowerFuncDecl lowers the given Go function declaration to LLVM IR.
 func (gen *Generator) lowerFuncDecl(old *ast.FuncDecl) {
+	// LLVM IR function generator.
+	fgen := gen.newFuncGen()
+	// Function name.
 	funcName := old.Name.String()
-	f, ok := gen.new.funcs[funcName]
-	if !ok {
-		gen.Errorf("unable to locate function %q", funcName)
+	// Function scope.
+	funcScope := gen.scope.Innermost(old.Name.Pos())
+	fmt.Printf("funcScope: %T\n", funcScope)
+	fgen.scope = funcScope
+	// Receiver.
+	receivers := gen.irParams(old.Recv)
+	// Function parameters.
+	params := gen.irParams(old.Type.Params)
+	// Add reciver to function parameters if present.
+	switch len(receivers) {
+	case 0:
+		// nothing to do.
+	case 1:
+		// To avoid function name collisions, rename "M" to "T.M".
+		recvType := receivers[0].Typ
+		funcName = fmt.Sprintf("%s.%s", recvType.Name(), funcName)
+		// Prepend receiver as first parameter of function.
+		params = append(receivers, params...)
+	default:
+		panic(fmt.Errorf("support for multiple receivers not yet implemented; %q has %d receivers", funcName, len(receivers)))
+	}
+	// Return type.
+	results := gen.irParams(old.Type.Results)
+	var retType types.Type
+	switch len(results) {
+	case 0:
+		retType = types.Void
+	case 1:
+		retType = results[0].Typ
+	default:
+		var resultTypes []types.Type
+		for _, result := range results {
+			resultTypes = append(resultTypes, result.Typ)
+		}
+		retType = types.NewStruct(resultTypes...)
+	}
+	// Add function.
+	f := gen.m.NewFunc(funcName, retType, params...)
+	if prev, ok := gen.new.funcs[funcName]; ok {
+		gen.Errorf("function %q already present; prev `%v`, new `%v`", funcName, prev, f)
 		return
 	}
-	fgen := gen.newFuncGen(f)
+	fgen.f = f
+	gen.new.funcs[funcName] = f
+	// Lower function body.
 	if old.Body != nil {
 		fgen.lowerFuncBody(old.Body)
 	}
@@ -140,22 +166,28 @@ func (gen *Generator) lowerSpec(old ast.Spec) {
 	}
 }
 
-// lowerGenDecl lowers the given Go variable declaration to LLVM IR.
+// lowerValueSpec lowers the given Go variable declaration to LLVM IR.
 func (gen *Generator) lowerValueSpec(old *ast.ValueSpec) {
 	for _, oldName := range old.Names {
 		name := oldName.String()
-		gen.old.globals[name] = old
+		obj := gen.scope.Lookup(name)
+		fmt.Println("obj:", obj)
+		gen.lowerObject(obj)
 	}
 }
 
-// oldIndex is an index of AST top-level entities.
-type oldIndex struct {
-	// typeDefs maps from type identifier to the underlying type definition.
-	typeDefs map[string]ast.Expr // Go type
-	// globals maps from global identifier to global declarations and defintions.
-	globals map[string]*ast.ValueSpec
-	// funcs maps from global identifier to function declarations and defintions.
-	funcs map[string]*ast.FuncDecl
+// lowerObject lowers the given Go object to LLVM IR.
+func (gen *Generator) lowerObject(old gotypes.Object) {
+	typ, err := gen.irType(old.Type())
+	if err != nil {
+		gen.eh(err)
+		return
+	}
+	_ = typ
+	switch old := old.(type) {
+	default:
+		panic(fmt.Errorf("support for object type %T not yet implemented", old))
+	}
 }
 
 // newIndex is an index of IR top-level entities.

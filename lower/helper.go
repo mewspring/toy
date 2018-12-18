@@ -13,10 +13,10 @@ func (gen *Generator) irParams(old *ast.FieldList) []*ir.Param {
 	}
 	var params []*ir.Param
 	for _, oldParam := range old.List {
-		typ, err := gen.irASTType(oldParam.Type)
+		typ, err := gen.irTypeOf(oldParam.Type)
 		if err != nil {
 			gen.eh(err)
-			break
+			continue
 		}
 		if len(oldParam.Names) > 0 {
 			for _, name := range oldParam.Names {

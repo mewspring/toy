@@ -1,4 +1,4 @@
-package main
+package lower
 
 import (
 	"fmt"
@@ -191,6 +191,8 @@ func (fgen *funcGen) lowerBinaryExpr(old *ast.BinaryExpr) (value.Value, error) {
 		panic(fmt.Errorf("support for '%s' binary expression not yet implemented", old.Op))
 	}
 }
+
+// ### [ Helper functions ] ####################################################
 
 // isIntOrIntVectorType reports whether the given type is an integer scalar or
 // integer vector type.

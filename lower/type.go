@@ -1,4 +1,4 @@
-package main
+package lower
 
 import (
 	"fmt"
@@ -8,16 +8,15 @@ import (
 
 	"github.com/llir/llvm/ir/types"
 	"github.com/pkg/errors"
-	"golang.org/x/tools/go/packages"
 )
 
 // === [ go/ast types API ] ====================================================
 
 // resolveTypeDefs resolves the type definitions of the given Go package.
-func (gen *generator) resolveTypeDefs(pkg *packages.Package) {
+func (gen *Generator) resolveTypeDefs() {
 	// Index type identifiers and create scaffolding IR type definitions (without
 	// bodies).
-	for _, file := range pkg.Syntax {
+	for _, file := range gen.pkg.Syntax {
 		for _, decl := range file.Decls {
 			if decl, ok := decl.(*ast.GenDecl); ok {
 				if decl.Tok != token.TYPE {
@@ -44,7 +43,7 @@ func (gen *generator) resolveTypeDefs(pkg *packages.Package) {
 }
 
 // newASTType creates a new LLVM IR type (without body) based on the given Go type.
-func (gen *generator) newASTType(typeName string, old ast.Expr) types.Type {
+func (gen *Generator) newASTType(typeName string, old ast.Expr) types.Type {
 	switch old := old.(type) {
 	case *ast.Ident:
 		newName := old.String()
@@ -62,7 +61,7 @@ func (gen *generator) newASTType(typeName string, old ast.Expr) types.Type {
 // irASTTypeDef translates the AST type into an equivalent IR type. A new IR
 // type correspoding to the AST type is created if t is nil, otherwise the body
 // of t is populated. Named types are resolved through gen.new.typeDefs.
-func (gen *generator) irASTTypeDef(t types.Type, old ast.Expr) (types.Type, error) {
+func (gen *Generator) irASTTypeDef(t types.Type, old ast.Expr) (types.Type, error) {
 	switch old := old.(type) {
 	case *ast.Ident:
 		return gen.irASTNamedType(t, old)
@@ -80,7 +79,7 @@ func (gen *generator) irASTTypeDef(t types.Type, old ast.Expr) (types.Type, erro
 // irASTPointerType translates the AST pointer type into an equivalent IR type.
 // A new IR type correspoding to the AST type is created if t is nil, otherwise
 // the body of t is populated.
-func (gen *generator) irASTPointerType(t types.Type, old *ast.StarExpr) (types.Type, error) {
+func (gen *Generator) irASTPointerType(t types.Type, old *ast.StarExpr) (types.Type, error) {
 	typ, ok := t.(*types.PointerType)
 	if t == nil {
 		typ = &types.PointerType{}
@@ -99,7 +98,7 @@ func (gen *generator) irASTPointerType(t types.Type, old *ast.StarExpr) (types.T
 // --- [ Named type ] ----------------------------------------------------------
 
 // irASTNamedType translates the AST named type into an equivalent IR type.
-func (gen *generator) irASTNamedType(t types.Type, old *ast.Ident) (types.Type, error) {
+func (gen *Generator) irASTNamedType(t types.Type, old *ast.Ident) (types.Type, error) {
 	// TODO: make use of t?
 	// Resolve named type.
 	typeName := old.String()
@@ -115,7 +114,7 @@ func (gen *generator) irASTNamedType(t types.Type, old *ast.Ident) (types.Type, 
 // irASTStructType translates the AST struct type into an equivalent IR type. A
 // new IR type correspoding to the AST type is created if t is nil, otherwise
 // the body of t is populated.
-func (gen *generator) irASTStructType(t types.Type, old *ast.StructType) (types.Type, error) {
+func (gen *Generator) irASTStructType(t types.Type, old *ast.StructType) (types.Type, error) {
 	typ, ok := t.(*types.StructType)
 	if t == nil {
 		typ = &types.StructType{}
@@ -133,20 +132,20 @@ func (gen *generator) irASTStructType(t types.Type, old *ast.StructType) (types.
 // ### [ Helpers ] #############################################################
 
 // irASTType returns the IR type corresponding to the given AST type.
-func (gen *generator) irASTType(old ast.Expr) (types.Type, error) {
+func (gen *Generator) irASTType(old ast.Expr) (types.Type, error) {
 	return gen.irASTTypeDef(nil, old)
 }
 
 // === [ go/types API ] ========================================================
 
 // irTypeOf returns the LLVM IR type of the given Go expression.
-func (gen *generator) irTypeOf(expr ast.Expr) (types.Type, error) {
+func (gen *Generator) irTypeOf(expr ast.Expr) (types.Type, error) {
 	goType := gen.pkg.TypesInfo.TypeOf(expr)
 	return gen.irType(goType)
 }
 
 // irType returns the IR type of the given Go expression.
-func (gen *generator) irType(goType gotypes.Type) (types.Type, error) {
+func (gen *Generator) irType(goType gotypes.Type) (types.Type, error) {
 	switch goType := goType.(type) {
 	case *gotypes.Basic:
 		return gen.irBasicType(goType), nil
@@ -159,7 +158,7 @@ func (gen *generator) irType(goType gotypes.Type) (types.Type, error) {
 const cpuWordSize = 64
 
 // irBasicType returns the IR type of the given Go basic type.
-func (gen *generator) irBasicType(goType *gotypes.Basic) types.Type {
+func (gen *Generator) irBasicType(goType *gotypes.Basic) types.Type {
 	// predeclared types
 	switch goType.Kind() {
 	case gotypes.Bool:

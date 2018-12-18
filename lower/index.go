@@ -1,23 +1,22 @@
-package main
+package lower
 
 import (
 	"fmt"
 	"go/ast"
 
 	"github.com/llir/llvm/ir/types"
-	"golang.org/x/tools/go/packages"
 )
 
 // indexPackage indexes the top-level declarations of the given Go package.
-func (gen *generator) indexPackage(pkg *packages.Package) {
+func (gen *Generator) indexPackage() {
 	// Index top-level declarations.
-	for _, file := range pkg.Syntax {
+	for _, file := range gen.pkg.Syntax {
 		gen.indexFile(file)
 	}
 }
 
 // indexFile indexes the top-level declarations of the given Go file.
-func (gen *generator) indexFile(file *ast.File) {
+func (gen *Generator) indexFile(file *ast.File) {
 	// Index top-level declarations.
 	for _, decl := range file.Decls {
 		gen.indexDecl(decl)
@@ -25,7 +24,7 @@ func (gen *generator) indexFile(file *ast.File) {
 }
 
 // indexDecl indexes the given top-level declaration.
-func (gen *generator) indexDecl(old ast.Decl) {
+func (gen *Generator) indexDecl(old ast.Decl) {
 	switch old := old.(type) {
 	case *ast.FuncDecl:
 		gen.indexFuncDecl(old)
@@ -37,7 +36,7 @@ func (gen *generator) indexDecl(old ast.Decl) {
 }
 
 // indexFuncDecl indexes the given function declaration.
-func (gen *generator) indexFuncDecl(old *ast.FuncDecl) {
+func (gen *Generator) indexFuncDecl(old *ast.FuncDecl) {
 	funcName := old.Name.String()
 	// Receiver.
 	receivers := gen.irParams(old.Recv)
@@ -74,21 +73,21 @@ func (gen *generator) indexFuncDecl(old *ast.FuncDecl) {
 	// Add function.
 	f := gen.m.NewFunc(funcName, retType, params...)
 	if prev, ok := gen.new.funcs[funcName]; ok {
-		gen.c.Errorf("function %q already present; prev `%v`, new `%v`", funcName, prev, f)
+		gen.Errorf("function %q already present; prev `%v`, new `%v`", funcName, prev, f)
 		return
 	}
 	gen.new.funcs[funcName] = f
 }
 
 // indexGenDecl indexes the given top-level declaration.
-func (gen *generator) indexGenDecl(old *ast.GenDecl) {
+func (gen *Generator) indexGenDecl(old *ast.GenDecl) {
 	for _, oldSpec := range old.Specs {
 		gen.indexSpec(oldSpec)
 	}
 }
 
 // indexSpec indexes the given specifier.
-func (gen *generator) indexSpec(old ast.Spec) {
+func (gen *Generator) indexSpec(old ast.Spec) {
 	switch old := old.(type) {
 	case *ast.TypeSpec:
 		gen.old.typeDefs[old.Name.String()] = old.Type

@@ -60,8 +60,6 @@ func main() {
 		}
 		log.Fatal(buf.String())
 	}
-	if len(c.errs) > 0 {
-	}
 	// Print compiled LLVM IR modules.
 	for _, m := range c.modules {
 		fmt.Println(m)

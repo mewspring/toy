@@ -52,7 +52,8 @@ func (fgen *funcGen) lowerExpr(old ast.Expr) (value.Value, error) {
 		if f, ok := fgen.gen.new.funcs[name]; ok {
 			return f, nil
 		}
-		if v, ok := fgen.gen.new.globals[name]; ok {
+		if mem, ok := fgen.gen.new.globals[name]; ok {
+			v := fgen.cur.NewLoad(mem)
 			return v, nil
 		}
 		return nil, errors.Errorf("unable to locate top-level definition of identifier %q", name)

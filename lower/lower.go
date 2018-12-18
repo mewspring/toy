@@ -178,14 +178,16 @@ func (gen *Generator) lowerValueSpec(old *ast.ValueSpec) {
 				gen.eh(err)
 				continue
 			}
-			gen.m.NewGlobalDef(name, init)
+			v := gen.m.NewGlobalDef(name, init)
+			gen.new.globals[name] = v
 		} else {
 			typ, err := gen.irTypeOf(old.Type)
 			if err != nil {
 				gen.eh(err)
 				return
 			}
-			gen.m.NewGlobalDecl(name, typ)
+			v := gen.m.NewGlobalDecl(name, typ)
+			gen.new.globals[name] = v
 		}
 	}
 }

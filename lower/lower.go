@@ -7,6 +7,7 @@ import (
 	gotypes "go/types"
 
 	"github.com/llir/llvm/ir"
+	"github.com/llir/llvm/ir/constant"
 	"github.com/llir/llvm/ir/types"
 	"github.com/rickypai/natsort"
 	"golang.org/x/tools/go/packages"
@@ -166,27 +167,36 @@ func (gen *Generator) lowerSpec(old ast.Spec) {
 	}
 }
 
-// lowerValueSpec lowers the given Go variable declaration to LLVM IR.
+// lowerValueSpec lowers the given Go variable declaration to LLVM IR, emitting
+// to m.
 func (gen *Generator) lowerValueSpec(old *ast.ValueSpec) {
-	for _, oldName := range old.Names {
+	for i, oldName := range old.Names {
 		name := oldName.String()
-		obj := gen.scope.Lookup(name)
-		fmt.Println("obj:", obj)
-		gen.lowerObject(obj)
+		if len(old.Values) > 0 {
+			oldValue := old.Values[i]
+			init, err := gen.lowerGlobalInitExpr(oldValue)
+			if err != nil {
+				gen.eh(err)
+				continue
+			}
+			gen.m.NewGlobalDef(name, init)
+		} else {
+			typ, err := gen.irTypeOf(old.Type)
+			if err != nil {
+				gen.eh(err)
+				return
+			}
+			gen.m.NewGlobalDecl(name, typ)
+		}
 	}
 }
 
-// lowerObject lowers the given Go object to LLVM IR.
-func (gen *Generator) lowerObject(old gotypes.Object) {
-	typ, err := gen.irType(old.Type())
-	if err != nil {
-		gen.eh(err)
-		return
-	}
-	_ = typ
+// lowerGlobalInit lowers the given Go global initialization expression to LLVM
+// IR.
+func (gen *Generator) lowerGlobalInitExpr(old ast.Expr) (constant.Constant, error) {
 	switch old := old.(type) {
 	default:
-		panic(fmt.Errorf("support for object type %T not yet implemented", old))
+		panic(fmt.Errorf("support for global initialization expression %T not yet implemented", old))
 	}
 }
 

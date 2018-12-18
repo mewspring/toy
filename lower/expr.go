@@ -12,6 +12,14 @@ import (
 	"github.com/pkg/errors"
 )
 
+// lowerExpr lowers the Go expression to LLVM IR, emitting to m.
+func (gen *Generator) lowerExpr(old ast.Expr) (value.Value, error) {
+	switch old := old.(type) {
+	default:
+		panic(fmt.Errorf("support for expression %T not yet implemented", old))
+	}
+}
+
 // lowerExpr lowers the Go expression to LLVM IR, emitting to f.
 func (fgen *funcGen) lowerExpr(old ast.Expr) (value.Value, error) {
 	switch old := old.(type) {

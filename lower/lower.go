@@ -110,16 +110,8 @@ func (gen *Generator) lowerFuncDecl(goFuncDecl *ast.FuncDecl) {
 	gen.funcs[funcName] = f
 	// Lower function body.
 	if goFuncDecl.Body != nil {
-		fgen.lowerFuncBody(goFuncDecl.Body)
-	}
-}
-
-// lowerFuncBody lowers the Go function body block statement to LLVM IR,
-// emitting to f.
-func (fgen *funcGen) lowerFuncBody(goBlockStmt *ast.BlockStmt) {
-	fgen.cur = fgen.f.NewBlock("entry")
-	for _, goStmt := range goBlockStmt.List {
-		fgen.lowerStmt(goStmt)
+		fgen.cur = fgen.f.NewBlock("entry")
+		fgen.lowerStmt(goFuncDecl.Body)
 	}
 }
 

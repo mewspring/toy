@@ -7,6 +7,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/llir/llvm/ir"
 	"github.com/llir/llvm/ir/constant"
 	"github.com/llir/llvm/ir/enum"
 	"github.com/llir/llvm/ir/types"
@@ -36,11 +37,11 @@ func (fgen *funcGen) lowerExpr(goExpr ast.Expr) (value.Value, error) {
 
 // lowerBinaryExpr lowers the Go binary expression to LLVM IR, emitting to f.
 func (fgen *funcGen) lowerBinaryExpr(goExpr *ast.BinaryExpr) (value.Value, error) {
-	x, err := fgen.lowerExpr(goExpr.X)
+	x, err := fgen.lowerExprUse(goExpr.X)
 	if err != nil {
 		return nil, errors.WithStack(err)
 	}
-	y, err := fgen.lowerExpr(goExpr.Y)
+	y, err := fgen.lowerExprUse(goExpr.Y)
 	if err != nil {
 		return nil, errors.WithStack(err)
 	}
@@ -178,15 +179,15 @@ func (fgen *funcGen) lowerBinaryExpr(goExpr *ast.BinaryExpr) (value.Value, error
 
 // lowerCallExpr lowers the Go call expression to LLVM IR, emitting to f.
 func (fgen *funcGen) lowerCallExpr(goCallExpr *ast.CallExpr) (value.Value, error) {
+	callee, err := fgen.lowerExprUse(goCallExpr.Fun)
+	if err != nil {
+		return nil, errors.WithStack(err)
+	}
 	args, err := fgen.lowerExprs(goCallExpr.Args)
 	if err != nil {
 		return nil, errors.WithStack(err)
 	}
 	// TODO: handle goCallExpr.Ellipsis.
-	callee, err := fgen.lowerExpr(goCallExpr.Fun)
-	if err != nil {
-		return nil, errors.WithStack(err)
-	}
 	return fgen.cur.NewCall(callee, args...), nil
 }
 
@@ -196,8 +197,7 @@ func (fgen *funcGen) lowerIdentExpr(goIdent *ast.Ident) (value.Value, error) {
 	if f, ok := fgen.gen.funcs[name]; ok {
 		return f, nil
 	}
-	if mem, ok := fgen.gen.globals[name]; ok {
-		v := fgen.cur.NewLoad(mem)
+	if v, ok := fgen.gen.globals[name]; ok {
 		return v, nil
 	}
 	return nil, errors.Errorf("unable to locate top-level definition of identifier %q", name)
@@ -205,7 +205,7 @@ func (fgen *funcGen) lowerIdentExpr(goIdent *ast.Ident) (value.Value, error) {
 
 // lowerBinaryExpr lowers the Go binary expression to LLVM IR, emitting to f.
 func (fgen *funcGen) lowerUnaryExpr(goExpr *ast.UnaryExpr) (value.Value, error) {
-	x, err := fgen.lowerExpr(goExpr.X)
+	x, err := fgen.lowerExprUse(goExpr.X)
 	if err != nil {
 		return nil, errors.WithStack(err)
 	}
@@ -310,11 +310,24 @@ func (gen *Generator) lowerBasicLit(goLit *ast.BasicLit) constant.Constant {
 
 // ### [ Helper functions ] ####################################################
 
+// lowerExprUse lowers the Go expression to LLVM IR, emitting to f. The value
+// stored at global variables is loaded to be ready for use.
+func (fgen *funcGen) lowerExprUse(goExpr ast.Expr) (value.Value, error) {
+	v, err := fgen.lowerExpr(goExpr)
+	if err != nil {
+		return nil, errors.WithStack(err)
+	}
+	if v, ok := v.(*ir.Global); ok {
+		return fgen.cur.NewLoad(v), nil
+	}
+	return v, nil
+}
+
 // lowerExprs lowers the given Go expressions to LLVM IR, emitting to f.
 func (fgen *funcGen) lowerExprs(goExprs []ast.Expr) ([]value.Value, error) {
 	var vs []value.Value
 	for _, goExpr := range goExprs {
-		v, err := fgen.lowerExpr(goExpr)
+		v, err := fgen.lowerExprUse(goExpr)
 		if err != nil {
 			return nil, errors.WithStack(err)
 		}

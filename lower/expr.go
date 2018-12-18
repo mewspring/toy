@@ -14,89 +14,38 @@ import (
 	"github.com/pkg/errors"
 )
 
-// lowerBasicLit lowers the Go literal of basic type to LLVM IR.
-func (gen *Generator) lowerBasicLit(old *ast.BasicLit) constant.Constant {
-	typ, err := gen.irTypeOf(old)
-	if err != nil {
-		panic(fmt.Errorf("unable to locate type of expresion `%v`; %v", old, err))
-	}
-	switch old.Kind {
-	case token.INT:
-		t, ok := typ.(*types.IntType)
-		if !ok {
-			panic(fmt.Errorf("invalid type of integer literal; expected *types.IntType, got %T", t))
-		}
-		x, err := constant.NewIntFromString(t, old.Value)
-		if err != nil {
-			panic(fmt.Errorf("unable to parse integer literal %q; %v", old.Value, err))
-		}
-		return x
-	case token.FLOAT:
-		t, ok := typ.(*types.FloatType)
-		if !ok {
-			panic(fmt.Errorf("invalid type of integer literal; expected *types.FloatType, got %T", t))
-		}
-		x, err := constant.NewFloatFromString(t, old.Value)
-		if err != nil {
-			panic(fmt.Errorf("unable to parse floating-point literal %q; %v", old.Value, err))
-		}
-		return x
-	//case token.IMAG:
-	case token.CHAR:
-		t, ok := typ.(*types.IntType)
-		if !ok {
-			panic(fmt.Errorf("invalid type of integer literal; expected *types.IntType, got %T", t))
-		}
-		s := old.Value
-		if len(s) >= 2 && strings.HasPrefix(s, "'") && strings.HasSuffix(s, "'") {
-			s = s[len("'") : len(s)-len("'")]
-		}
-		val, _, _, err := strconv.UnquoteChar(s, '\'')
-		if err != nil {
-			panic(fmt.Errorf("unable to parse character literal %s; %v", s, err))
-		}
-		return constant.NewInt(t, int64(val))
-	case token.STRING:
-		s, err := strconv.Unquote(old.Value)
-		if err != nil {
-			panic(fmt.Errorf("unable to parse string literal %s; %v", s, err))
-		}
-		return constant.NewCharArrayFromString(s)
-	default:
-		panic(fmt.Errorf("support for literal of basic type %v not yet implemented", old.Kind))
-	}
-}
+// --- [ Lower expression with function generator ] ----------------------------
 
 // lowerExpr lowers the Go expression to LLVM IR, emitting to f.
-func (fgen *funcGen) lowerExpr(old ast.Expr) (value.Value, error) {
-	switch old := old.(type) {
+func (fgen *funcGen) lowerExpr(goExpr ast.Expr) (value.Value, error) {
+	switch goExpr := goExpr.(type) {
 	case *ast.BasicLit:
-		return fgen.gen.lowerBasicLit(old), nil
+		return fgen.gen.lowerBasicLit(goExpr), nil
 	case *ast.BinaryExpr:
-		return fgen.lowerBinaryExpr(old)
+		return fgen.lowerBinaryExpr(goExpr)
 	case *ast.CallExpr:
-		return fgen.lowerCallExpr(old)
+		return fgen.lowerCallExpr(goExpr)
 	case *ast.Ident:
-		return fgen.lowerIdentExpr(old)
+		return fgen.lowerIdentExpr(goExpr)
 	case *ast.UnaryExpr:
-		return fgen.lowerUnaryExpr(old)
+		return fgen.lowerUnaryExpr(goExpr)
 	default:
-		panic(fmt.Errorf("support for expression %T not yet implemented", old))
+		panic(fmt.Errorf("support for expression %T not yet implemented", goExpr))
 	}
 }
 
 // lowerBinaryExpr lowers the Go binary expression to LLVM IR, emitting to f.
-func (fgen *funcGen) lowerBinaryExpr(old *ast.BinaryExpr) (value.Value, error) {
-	x, err := fgen.lowerExpr(old.X)
+func (fgen *funcGen) lowerBinaryExpr(goExpr *ast.BinaryExpr) (value.Value, error) {
+	x, err := fgen.lowerExpr(goExpr.X)
 	if err != nil {
 		return nil, errors.WithStack(err)
 	}
-	y, err := fgen.lowerExpr(old.Y)
+	y, err := fgen.lowerExpr(goExpr.Y)
 	if err != nil {
 		return nil, errors.WithStack(err)
 	}
 	t := x.Type()
-	switch old.Op {
+	switch goExpr.Op {
 	// Binary operations.
 	case token.ADD: // +
 		switch {
@@ -105,7 +54,7 @@ func (fgen *funcGen) lowerBinaryExpr(old *ast.BinaryExpr) (value.Value, error) {
 		case isFloatOrFloatVectorType(t):
 			return fgen.cur.NewFAdd(x, y), nil
 		default:
-			return nil, errors.Errorf("invalid operand type to '%s' binary expression; expected integer scalar, integer vector, floating-point scalar or floating-point vector type, got %T", old.Op, t)
+			return nil, errors.Errorf("invalid operand type to '%s' binary expression; expected integer scalar, integer vector, floating-point scalar or floating-point vector type, got %T", goExpr.Op, t)
 		}
 	case token.SUB: // -
 		switch {
@@ -114,7 +63,7 @@ func (fgen *funcGen) lowerBinaryExpr(old *ast.BinaryExpr) (value.Value, error) {
 		case isFloatOrFloatVectorType(t):
 			return fgen.cur.NewFSub(x, y), nil
 		default:
-			return nil, errors.Errorf("invalid operand type to '%s' binary expression; expected integer scalar, integer vector, floating-point scalar or floating-point vector type, got %T", old.Op, t)
+			return nil, errors.Errorf("invalid operand type to '%s' binary expression; expected integer scalar, integer vector, floating-point scalar or floating-point vector type, got %T", goExpr.Op, t)
 		}
 	case token.MUL: // *
 		switch {
@@ -123,7 +72,7 @@ func (fgen *funcGen) lowerBinaryExpr(old *ast.BinaryExpr) (value.Value, error) {
 		case isFloatOrFloatVectorType(t):
 			return fgen.cur.NewFMul(x, y), nil
 		default:
-			return nil, errors.Errorf("invalid operand type to '%s' binary expression; expected integer scalar, integer vector, floating-point scalar or floating-point vector type, got %T", old.Op, t)
+			return nil, errors.Errorf("invalid operand type to '%s' binary expression; expected integer scalar, integer vector, floating-point scalar or floating-point vector type, got %T", goExpr.Op, t)
 		}
 	case token.QUO: // /
 		switch {
@@ -134,7 +83,7 @@ func (fgen *funcGen) lowerBinaryExpr(old *ast.BinaryExpr) (value.Value, error) {
 		case isFloatOrFloatVectorType(t):
 			return fgen.cur.NewFDiv(x, y), nil
 		default:
-			return nil, errors.Errorf("invalid operand type to '%s' binary expression; expected integer scalar, integer vector, floating-point scalar or floating-point vector type, got %T", old.Op, t)
+			return nil, errors.Errorf("invalid operand type to '%s' binary expression; expected integer scalar, integer vector, floating-point scalar or floating-point vector type, got %T", goExpr.Op, t)
 		}
 	case token.REM: // %
 		switch {
@@ -145,37 +94,37 @@ func (fgen *funcGen) lowerBinaryExpr(old *ast.BinaryExpr) (value.Value, error) {
 		case isFloatOrFloatVectorType(t):
 			return fgen.cur.NewFRem(x, y), nil
 		default:
-			return nil, errors.Errorf("invalid operand type to '%s' binary expression; expected integer scalar, integer vector, floating-point scalar or floating-point vector type, got %T", old.Op, t)
+			return nil, errors.Errorf("invalid operand type to '%s' binary expression; expected integer scalar, integer vector, floating-point scalar or floating-point vector type, got %T", goExpr.Op, t)
 		}
 	// Bitwise operations.
 	case token.SHL: // <<
 		if !isIntOrIntVectorType(t) {
-			return nil, errors.Errorf("invalid operand type to '%s' binary expression; expected integer scalar or integer vector type, got %T", old.Op, t)
+			return nil, errors.Errorf("invalid operand type to '%s' binary expression; expected integer scalar or integer vector type, got %T", goExpr.Op, t)
 		}
 		return fgen.cur.NewShl(x, y), nil
 	case token.SHR: // >>
 		if !isIntOrIntVectorType(t) {
-			return nil, errors.Errorf("invalid operand type to '%s' binary expression; expected integer scalar or integer vector type, got %T", old.Op, t)
+			return nil, errors.Errorf("invalid operand type to '%s' binary expression; expected integer scalar or integer vector type, got %T", goExpr.Op, t)
 		}
 		return fgen.cur.NewLShr(x, y), nil
 	case token.AND: // &
 		if !isIntOrIntVectorType(t) {
-			return nil, errors.Errorf("invalid operand type to '%s' binary expression; expected integer scalar or integer vector type, got %T", old.Op, t)
+			return nil, errors.Errorf("invalid operand type to '%s' binary expression; expected integer scalar or integer vector type, got %T", goExpr.Op, t)
 		}
 		return fgen.cur.NewAnd(x, y), nil
 	case token.OR: // |
 		if !isIntOrIntVectorType(t) {
-			return nil, errors.Errorf("invalid operand type to '%s' binary expression; expected integer scalar or integer vector type, got %T", old.Op, t)
+			return nil, errors.Errorf("invalid operand type to '%s' binary expression; expected integer scalar or integer vector type, got %T", goExpr.Op, t)
 		}
 		return fgen.cur.NewOr(x, y), nil
 	case token.XOR: // ^
 		if !isIntOrIntVectorType(t) {
-			return nil, errors.Errorf("invalid operand type to '%s' binary expression; expected integer scalar or integer vector type, got %T", old.Op, t)
+			return nil, errors.Errorf("invalid operand type to '%s' binary expression; expected integer scalar or integer vector type, got %T", goExpr.Op, t)
 		}
 		return fgen.cur.NewXor(x, y), nil
 	case token.AND_NOT: // &^
 		if !isIntOrIntVectorType(t) {
-			return nil, errors.Errorf("invalid operand type to '%s' binary expression; expected integer scalar or integer vector type, got %T", old.Op, t)
+			return nil, errors.Errorf("invalid operand type to '%s' binary expression; expected integer scalar or integer vector type, got %T", goExpr.Op, t)
 		}
 		// Mask.
 		mask, err := allOnesMask(y.Type())
@@ -188,17 +137,17 @@ func (fgen *funcGen) lowerBinaryExpr(old *ast.BinaryExpr) (value.Value, error) {
 	case token.LAND: // &&
 		switch {
 		case !types.Equal(x.Type(), types.I1):
-			return nil, errors.Errorf("invalid operand type to '%s' binary expression; expected boolean type, got %T", old.Op, x.Type())
+			return nil, errors.Errorf("invalid operand type to '%s' binary expression; expected boolean type, got %T", goExpr.Op, x.Type())
 		case !types.Equal(y.Type(), types.I1):
-			return nil, errors.Errorf("invalid operand type to '%s' binary expression; expected boolean type, got %T", old.Op, y.Type())
+			return nil, errors.Errorf("invalid operand type to '%s' binary expression; expected boolean type, got %T", goExpr.Op, y.Type())
 		}
 		return fgen.cur.NewAnd(x, y), nil
 	case token.LOR: // ||
 		switch {
 		case !types.Equal(x.Type(), types.I1):
-			return nil, errors.Errorf("invalid operand type to '%s' binary expression; expected boolean type, got %T", old.Op, x.Type())
+			return nil, errors.Errorf("invalid operand type to '%s' binary expression; expected boolean type, got %T", goExpr.Op, x.Type())
 		case !types.Equal(y.Type(), types.I1):
-			return nil, errors.Errorf("invalid operand type to '%s' binary expression; expected boolean type, got %T", old.Op, y.Type())
+			return nil, errors.Errorf("invalid operand type to '%s' binary expression; expected boolean type, got %T", goExpr.Op, y.Type())
 		}
 		return fgen.cur.NewOr(x, y), nil
 	// Relational operations.
@@ -223,18 +172,18 @@ func (fgen *funcGen) lowerBinaryExpr(old *ast.BinaryExpr) (value.Value, error) {
 		// IPredSGE for signed and IPredUGE for unsigned.
 		return fgen.cur.NewICmp(enum.IPredSGE, x, y), nil
 	default:
-		panic(fmt.Errorf("support for '%s' binary expression not yet implemented", old.Op))
+		panic(fmt.Errorf("support for '%s' binary expression not yet implemented", goExpr.Op))
 	}
 }
 
 // lowerCallExpr lowers the Go call expression to LLVM IR, emitting to f.
-func (fgen *funcGen) lowerCallExpr(old *ast.CallExpr) (value.Value, error) {
-	args, err := fgen.lowerExprs(old.Args)
+func (fgen *funcGen) lowerCallExpr(goCallExpr *ast.CallExpr) (value.Value, error) {
+	args, err := fgen.lowerExprs(goCallExpr.Args)
 	if err != nil {
 		return nil, errors.WithStack(err)
 	}
-	// TODO: handle old.Ellipsis.
-	callee, err := fgen.lowerExpr(old.Fun)
+	// TODO: handle goCallExpr.Ellipsis.
+	callee, err := fgen.lowerExpr(goCallExpr.Fun)
 	if err != nil {
 		return nil, errors.WithStack(err)
 	}
@@ -242,12 +191,12 @@ func (fgen *funcGen) lowerCallExpr(old *ast.CallExpr) (value.Value, error) {
 }
 
 // lowerIdentExpr lowers the Go identifier expression to LLVM IR, emitting to f.
-func (fgen *funcGen) lowerIdentExpr(old *ast.Ident) (value.Value, error) {
-	name := old.String()
-	if f, ok := fgen.gen.new.funcs[name]; ok {
+func (fgen *funcGen) lowerIdentExpr(goIdent *ast.Ident) (value.Value, error) {
+	name := goIdent.String()
+	if f, ok := fgen.gen.funcs[name]; ok {
 		return f, nil
 	}
-	if mem, ok := fgen.gen.new.globals[name]; ok {
+	if mem, ok := fgen.gen.globals[name]; ok {
 		v := fgen.cur.NewLoad(mem)
 		return v, nil
 	}
@@ -255,13 +204,13 @@ func (fgen *funcGen) lowerIdentExpr(old *ast.Ident) (value.Value, error) {
 }
 
 // lowerBinaryExpr lowers the Go binary expression to LLVM IR, emitting to f.
-func (fgen *funcGen) lowerUnaryExpr(old *ast.UnaryExpr) (value.Value, error) {
-	x, err := fgen.lowerExpr(old.X)
+func (fgen *funcGen) lowerUnaryExpr(goExpr *ast.UnaryExpr) (value.Value, error) {
+	x, err := fgen.lowerExpr(goExpr.X)
 	if err != nil {
 		return nil, errors.WithStack(err)
 	}
 	t := x.Type()
-	switch old.Op {
+	switch goExpr.Op {
 	// Unary operations.
 	case token.ADD: // +
 		// Plus prefix is optional and has no effect.
@@ -287,17 +236,85 @@ func (fgen *funcGen) lowerUnaryExpr(old *ast.UnaryExpr) (value.Value, error) {
 	//case token.AND: // &
 	//case token.ARROW: // <-
 	default:
-		panic(fmt.Errorf("support for '%s' unary expression not yet implemented", old.Op))
+		panic(fmt.Errorf("support for '%s' unary expression not yet implemented", goExpr.Op))
+	}
+}
+
+// --- [ Lower expression with module generator ] ------------------------------
+
+// lowerGlobalInitExpr lowers the given Go global initialization expression to
+// LLVM IR.
+func (gen *Generator) lowerGlobalInitExpr(goExpr ast.Expr) (constant.Constant, error) {
+	switch goExpr := goExpr.(type) {
+	// Constant.
+	case *ast.BasicLit:
+		return gen.lowerBasicLit(goExpr), nil
+	// Non-constant, generate init functions.
+	default:
+		panic(fmt.Errorf("support for global initialization expression %T not yet implemented", goExpr))
+	}
+}
+
+// lowerBasicLit lowers the Go literal of basic type to LLVM IR.
+func (gen *Generator) lowerBasicLit(goLit *ast.BasicLit) constant.Constant {
+	typ, err := gen.irTypeOf(goLit)
+	if err != nil {
+		panic(fmt.Errorf("unable to locate type of expresion `%v`; %v", goLit, err))
+	}
+	switch goLit.Kind {
+	case token.INT:
+		t, ok := typ.(*types.IntType)
+		if !ok {
+			panic(fmt.Errorf("invalid type of integer literal; expected *types.IntType, got %T", t))
+		}
+		x, err := constant.NewIntFromString(t, goLit.Value)
+		if err != nil {
+			panic(fmt.Errorf("unable to parse integer literal %q; %v", goLit.Value, err))
+		}
+		return x
+	case token.FLOAT:
+		t, ok := typ.(*types.FloatType)
+		if !ok {
+			panic(fmt.Errorf("invalid type of integer literal; expected *types.FloatType, got %T", t))
+		}
+		x, err := constant.NewFloatFromString(t, goLit.Value)
+		if err != nil {
+			panic(fmt.Errorf("unable to parse floating-point literal %q; %v", goLit.Value, err))
+		}
+		return x
+	//case token.IMAG:
+	case token.CHAR:
+		t, ok := typ.(*types.IntType)
+		if !ok {
+			panic(fmt.Errorf("invalid type of integer literal; expected *types.IntType, got %T", t))
+		}
+		s := goLit.Value
+		if len(s) >= 2 && strings.HasPrefix(s, "'") && strings.HasSuffix(s, "'") {
+			s = s[len("'") : len(s)-len("'")]
+		}
+		val, _, _, err := strconv.UnquoteChar(s, '\'')
+		if err != nil {
+			panic(fmt.Errorf("unable to parse character literal %s; %v", s, err))
+		}
+		return constant.NewInt(t, int64(val))
+	case token.STRING:
+		s, err := strconv.Unquote(goLit.Value)
+		if err != nil {
+			panic(fmt.Errorf("unable to parse string literal %s; %v", s, err))
+		}
+		return constant.NewCharArrayFromString(s)
+	default:
+		panic(fmt.Errorf("support for literal of basic type %v not yet implemented", goLit.Kind))
 	}
 }
 
 // ### [ Helper functions ] ####################################################
 
 // lowerExprs lowers the given Go expressions to LLVM IR, emitting to f.
-func (fgen *funcGen) lowerExprs(oldExprs []ast.Expr) ([]value.Value, error) {
+func (fgen *funcGen) lowerExprs(goExprs []ast.Expr) ([]value.Value, error) {
 	var vs []value.Value
-	for _, oldExpr := range oldExprs {
-		v, err := fgen.lowerExpr(oldExpr)
+	for _, goExpr := range goExprs {
+		v, err := fgen.lowerExpr(goExpr)
 		if err != nil {
 			return nil, errors.WithStack(err)
 		}

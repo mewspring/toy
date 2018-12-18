@@ -1,7 +1,6 @@
 package lower
 
 import (
-	"go/ast"
 	gotypes "go/types"
 
 	"github.com/llir/llvm/ir"
@@ -24,14 +23,5 @@ type funcGen struct {
 func (gen *Generator) newFuncGen() *funcGen {
 	return &funcGen{
 		gen: gen,
-	}
-}
-
-// lowerFuncBody lowers the Go function body block statement to LLVM IR,
-// emitting to f.
-func (fgen *funcGen) lowerFuncBody(old *ast.BlockStmt) {
-	fgen.cur = fgen.f.NewBlock("entry")
-	for _, oldStmt := range old.List {
-		fgen.lowerStmt(oldStmt)
 	}
 }

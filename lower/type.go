@@ -74,17 +74,17 @@ func (gen *Generator) irBasicType(goType *gotypes.Basic) types.Type {
 	case gotypes.UntypedInt:
 		t := types.NewInt(64)
 		t.SetName("untyped_int")
-		gen.new.typeDefs["untyped_int"] = t
+		gen.typeDefs["untyped_int"] = t
 		return t
 	case gotypes.UntypedRune:
 		t := types.NewInt(32)
 		t.SetName("untyped_rune")
-		gen.new.typeDefs["untyped_rune"] = t
+		gen.typeDefs["untyped_rune"] = t
 		return t
 	case gotypes.UntypedFloat:
 		t := &types.FloatType{Kind: types.FloatKindDouble}
 		t.SetName("untyped_float")
-		gen.new.typeDefs["untyped_float"] = t
+		gen.typeDefs["untyped_float"] = t
 		return t
 	case gotypes.UntypedComplex:
 		untypedFloat := &types.FloatType{Kind: types.FloatKindDouble}
@@ -94,7 +94,7 @@ func (gen *Generator) irBasicType(goType *gotypes.Basic) types.Type {
 			untypedFloat, // imag
 		)
 		t.SetName("untyped_complex")
-		gen.new.typeDefs["untyped_complex"] = t
+		gen.typeDefs["untyped_complex"] = t
 		return t
 	case gotypes.UntypedString:
 		t := types.NewStruct(
@@ -102,12 +102,12 @@ func (gen *Generator) irBasicType(goType *gotypes.Basic) types.Type {
 			types.I64,                  // len
 		)
 		t.SetName("untyped_string")
-		gen.new.typeDefs["untyped_string"] = t
+		gen.typeDefs["untyped_string"] = t
 		return t
 	case gotypes.UntypedNil:
 		t := types.NewPointer(types.I8)
 		t.SetName("untyped_nil")
-		gen.new.typeDefs["untyped_nil"] = t
+		gen.typeDefs["untyped_nil"] = t
 		return t
 	default:
 		panic(fmt.Errorf("support for basic type of kind %v not yet implemented", goType.Kind()))

@@ -5,7 +5,11 @@ import (
 	"go/ast"
 
 	"github.com/llir/llvm/ir"
+	"github.com/llir/llvm/ir/enum"
+	"github.com/llir/llvm/ir/types"
+	"github.com/llir/llvm/ir/value"
 	"github.com/mewspring/toy/irgen"
+	"github.com/pkg/errors"
 )
 
 // lowerStmt lowers the Go statement to LLVM IR, emitting to f.
@@ -13,10 +17,14 @@ func (fgen *funcGen) lowerStmt(goStmt ast.Stmt) {
 	switch goStmt := goStmt.(type) {
 	case *ast.BlockStmt:
 		fgen.lowerBlockStmt(goStmt)
+	case *ast.ExprStmt:
+		fgen.lowerExprStmt(goStmt)
 	case *ast.IfStmt:
 		fgen.lowerIfStmt(goStmt)
 	case *ast.ReturnStmt:
 		fgen.lowerReturnStmt(goStmt)
+	case *ast.SwitchStmt:
+		fgen.lowerSwitchStmt(goStmt)
 	default:
 		panic(fmt.Errorf("support for statement %T not yet implemented", goStmt))
 	}
@@ -30,14 +38,22 @@ func (fgen *funcGen) lowerBlockStmt(goBlockStmt *ast.BlockStmt) {
 	}
 }
 
+// lowerExprStmt lowers the Go expression statement to LLVM IR, emitting to f.
+func (fgen *funcGen) lowerExprStmt(goExprStmt *ast.ExprStmt) {
+	if _, err := fgen.lowerExpr(goExprStmt.X); err != nil {
+		fgen.gen.eh(err)
+		return
+	}
+}
+
 // lowerIfStmt lowers the Go if-statement to LLVM IR, emitting to f.
-func (fgen *funcGen) lowerIfStmt(goStmt *ast.IfStmt) {
+func (fgen *funcGen) lowerIfStmt(goIfStmt *ast.IfStmt) {
 	// Initialization statement.
-	if goStmt.Init != nil {
-		fgen.lowerStmt(goStmt.Init)
+	if goIfStmt.Init != nil {
+		fgen.lowerStmt(goIfStmt.Init)
 	}
 	// Condition.
-	cond, err := fgen.lowerExprUse(goStmt.Cond)
+	cond, err := fgen.lowerExprUse(goIfStmt.Cond)
 	if err != nil {
 		fgen.gen.eh(err)
 		return
@@ -52,7 +68,7 @@ func (fgen *funcGen) lowerIfStmt(goStmt *ast.IfStmt) {
 	// True branch (if-branch).
 	targetTrue := fgen.f.NewBlock("")
 	fgen.cur = targetTrue
-	fgen.lowerStmt(goStmt.Body)
+	fgen.lowerStmt(goIfStmt.Body)
 	if fgen.cur.Term == nil {
 		fgen.cur.NewBr(followBlock)
 	}
@@ -60,10 +76,10 @@ func (fgen *funcGen) lowerIfStmt(goStmt *ast.IfStmt) {
 	// present.
 	targetFalse := followBlock
 	// False branch (else-branch).
-	if goStmt.Else != nil {
+	if goIfStmt.Else != nil {
 		targetFalse = fgen.f.NewBlock("")
 		fgen.cur = targetFalse
-		fgen.lowerStmt(goStmt.Else)
+		fgen.lowerStmt(goIfStmt.Else)
 		if fgen.cur.Term == nil {
 			fgen.cur.NewBr(followBlock)
 		}
@@ -77,8 +93,8 @@ func (fgen *funcGen) lowerIfStmt(goStmt *ast.IfStmt) {
 }
 
 // lowerReturnStmt lowers the Go return statement to LLVM IR, emitting to f.
-func (fgen *funcGen) lowerReturnStmt(goStmt *ast.ReturnStmt) {
-	results, err := fgen.lowerExprs(goStmt.Results)
+func (fgen *funcGen) lowerReturnStmt(goRetStmt *ast.ReturnStmt) {
+	results, err := fgen.lowerExprs(goRetStmt.Results)
 	if err != nil {
 		fgen.gen.eh(err)
 		return
@@ -93,5 +109,99 @@ func (fgen *funcGen) lowerReturnStmt(goStmt *ast.ReturnStmt) {
 	default:
 		// multiple return values.
 		irgen.NewAggregateRet(fgen.cur, results...)
+	}
+}
+
+// lowerSwitchStmt lowers the Go switch-statement to LLVM IR, emitting to f.
+func (fgen *funcGen) lowerSwitchStmt(goSwitchStmt *ast.SwitchStmt) {
+	// Initialization statement.
+	if goSwitchStmt.Init != nil {
+		fgen.lowerStmt(goSwitchStmt.Init)
+	}
+	var goCases []*ast.CaseClause
+	for _, goStmt := range goSwitchStmt.Body.List {
+		goCase, ok := goStmt.(*ast.CaseClause)
+		if !ok {
+			panic(fmt.Errorf("invalid case clause type; expected *ast.CaseClause, got %T", goStmt))
+		}
+		goCases = append(goCases, goCase)
+	}
+	if goSwitchStmt.Tag != nil {
+		// Tag.
+		tag, err := fgen.lowerExprUse(goSwitchStmt.Tag)
+		if err != nil {
+			fgen.gen.eh(err)
+			return
+		}
+		var caseBlocks []*ir.BasicBlock
+		nextBlock := ir.NewBlock("")
+		followBlock := ir.NewBlock("") // "follow"
+		for _, goCase := range goCases {
+			if goCase.List != nil {
+				// case branches.
+				caseBlock := ir.NewBlock("") // fmt.Sprintf("case_%d", i)
+				caseBlocks = append(caseBlocks, caseBlock)
+				for _, goExpr := range goCase.List {
+					x, err := fgen.lowerExprUse(goExpr)
+					if err != nil {
+						fgen.gen.eh(err)
+						continue
+					}
+					cond, err := fgen.lowerEqual(tag, x)
+					if err != nil {
+						fgen.gen.eh(err)
+						continue
+					}
+					fgen.cur.NewCondBr(cond, caseBlock, nextBlock)
+					fgen.cur = nextBlock
+					fgen.f.Blocks = append(fgen.f.Blocks, nextBlock)
+					nextBlock = ir.NewBlock("")
+				}
+			} else {
+				// default branch.
+				caseBlock := ir.NewBlock("") // "default"
+				caseBlocks = append(caseBlocks, caseBlock)
+				fgen.cur.NewBr(caseBlock)
+			}
+		}
+		// Case bodies.
+		for i, goCase := range goCases {
+			caseBlock := caseBlocks[i]
+			fgen.cur = caseBlock
+			for _, goStmt := range goCase.Body {
+				fgen.lowerStmt(goStmt)
+			}
+			if fgen.cur.Term == nil {
+				fgen.cur.NewBr(followBlock)
+			}
+			fgen.f.Blocks = append(fgen.f.Blocks, caseBlock)
+		}
+		// Follow basic block.
+		fgen.cur = followBlock
+		fgen.f.Blocks = append(fgen.f.Blocks, followBlock)
+	} else {
+		// No tag.
+		// TODO: implement support for switch statement without a tag.
+		panic("support for switch statement without tag not yet implemented")
+	}
+}
+
+// ### [ Helper functions ] ####################################################
+
+// lowerEqual lowers a Go equality comparison between a and b to LLVM IR,
+// emitting to f.
+func (fgen *funcGen) lowerEqual(a, b value.Value) (value.Value, error) {
+	if !types.Equal(a.Type(), b.Type()) {
+		return nil, errors.Errorf("type mismatch between `%s` and `%s`", a.Type(), a.Type())
+	}
+	t := a.Type()
+	switch {
+	case types.IsInt(t):
+		return fgen.cur.NewICmp(enum.IPredEQ, a, b), nil
+	case types.IsFloat(t):
+		// TODO: figure out when to use enum.FPredUEQ.
+		return fgen.cur.NewFCmp(enum.FPredOEQ, a, b), nil
+	default:
+		panic(fmt.Errorf("support for equality comparison of type %v not yet implemented", t))
 	}
 }

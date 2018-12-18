@@ -62,6 +62,6 @@ func main() {
 	}
 	// Print compiled LLVM IR modules.
 	for _, m := range c.modules {
-		fmt.Println(m)
+		fmt.Println(m.String())
 	}
 }

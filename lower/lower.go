@@ -67,7 +67,7 @@ func NewGenerator(eh func(error), pkg *packages.Package) *Generator {
 func (gen *Generator) Lower() *ir.Module {
 	gen.resolveTypeDefs()
 	gen.indexPackage()
-	gen.compilePackage()
+	gen.lowerPackage()
 	var typeNames []string
 	for typeName := range gen.new.typeDefs {
 		typeNames = append(typeNames, typeName)
@@ -80,36 +80,36 @@ func (gen *Generator) Lower() *ir.Module {
 	return gen.m
 }
 
-// compilePackage compiles the given Go package.
-func (gen *Generator) compilePackage() {
+// lowerPackage lowers the given Go package to LLVM IR.
+func (gen *Generator) lowerPackage() {
 	// Compile top-level declarations.
 	for _, file := range gen.pkg.Syntax {
-		gen.compileFile(file)
+		gen.lowerFile(file)
 	}
 }
 
-// compileFile compiles the given Go file.
-func (gen *Generator) compileFile(file *ast.File) {
+// lowerFile lowers the given Go file to LLVM IR.
+func (gen *Generator) lowerFile(file *ast.File) {
 	// Compile top-level declarations.
 	for _, old := range file.Decls {
-		gen.compileDecl(old)
+		gen.lowerDecl(old)
 	}
 }
 
-// compileDecl compiles the given declaration.
-func (gen *Generator) compileDecl(old ast.Decl) {
+// lowerDecl lowers the given Go declaration to LLVM IR.
+func (gen *Generator) lowerDecl(old ast.Decl) {
 	switch old := old.(type) {
 	case *ast.FuncDecl:
-		gen.compileFuncDecl(old)
+		gen.lowerFuncDecl(old)
 	case *ast.GenDecl:
-		gen.compileGenDecl(old)
+		gen.lowerGenDecl(old)
 	default:
 		panic(fmt.Errorf("support for declaration %T not yet implemented", old))
 	}
 }
 
-// compileFuncDecl compiles the given function declaration.
-func (gen *Generator) compileFuncDecl(old *ast.FuncDecl) {
+// lowerFuncDecl lowers the given Go function declaration to LLVM IR.
+func (gen *Generator) lowerFuncDecl(old *ast.FuncDecl) {
 	funcName := old.Name.String()
 	f, ok := gen.new.funcs[funcName]
 	if !ok {
@@ -122,8 +122,8 @@ func (gen *Generator) compileFuncDecl(old *ast.FuncDecl) {
 	}
 }
 
-// compileGenDecl compiles the given generic declaration.
-func (gen *Generator) compileGenDecl(old *ast.GenDecl) {
+// lowerGenDecl lowers the given Go generic declaration to LLVM IR.
+func (gen *Generator) lowerGenDecl(old *ast.GenDecl) {
 	log.Printf("support for top-level declaration %T not yet implemented", old)
 }
 

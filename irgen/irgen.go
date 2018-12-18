@@ -1,3 +1,4 @@
+// Package irgen implements utility functions for LLVM IR generation.
 package irgen
 
 import (
@@ -8,6 +9,8 @@ import (
 	"github.com/llir/llvm/ir/value"
 )
 
+// Builder is IR builder used to insert instructions and terminators to basic
+// blocks.
 type Builder interface {
 	NewAShr(x, y value.Value) *ir.InstAShr
 	NewAdd(x, y value.Value) *ir.InstAdd

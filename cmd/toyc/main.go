@@ -1,4 +1,4 @@
-// toyc is a toy compiler in Go.
+// toyc is a toy compiler written in Go.
 package main
 
 import (

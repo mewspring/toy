@@ -15,7 +15,7 @@ type compiler struct {
 	errs []error
 }
 
-// newCompiler returns a new compiler.
+// newCompiler returns a new compiler for tracking the state of compilation.
 func newCompiler() *compiler {
 	return &compiler{}
 }
@@ -29,10 +29,14 @@ func (c *compiler) pre(pkg *packages.Package) bool {
 
 // post is invoked in post-order traversal of the import graph.
 func (c *compiler) post(pkg *packages.Package) {
+	// By compiling packages in post-order traversal of the import graph, we are
+	// sure to compile dependencies before packages importing them.
 	dbg.Println("post:", pkg.Name)
+	// Error handler to track errors during compilation.
 	eh := func(err error) {
 		c.errs = append(c.errs, err)
 	}
+	// Lower Go package to an LLVM IR module.
 	gen := lower.NewGenerator(eh, pkg)
 	m := gen.Lower()
 	c.modules = append(c.modules, m)

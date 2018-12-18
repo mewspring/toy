@@ -8,13 +8,14 @@ import (
 	"github.com/llir/llvm/ir/types"
 )
 
-// irTypeOf returns the LLVM IR type of the given Go expression.
-func (gen *Generator) irTypeOf(expr ast.Expr) (types.Type, error) {
-	goType := gen.pkg.TypesInfo.TypeOf(expr)
+// irTypeOf returns the LLVM IR type of the given Go expression. It is valid to
+// pass a Go type expression (e.g. ast.FuncDecl.Type).
+func (gen *Generator) irTypeOf(goExpr ast.Expr) (types.Type, error) {
+	goType := gen.pkg.TypesInfo.TypeOf(goExpr)
 	return gen.irType(goType)
 }
 
-// irType returns the IR type of the given Go expression.
+// irType returns the LLVM IR type corresponding to the given Go type.
 func (gen *Generator) irType(goType gotypes.Type) (types.Type, error) {
 	switch goType := goType.(type) {
 	case *gotypes.Basic:
@@ -27,10 +28,11 @@ func (gen *Generator) irType(goType gotypes.Type) (types.Type, error) {
 // CPU word size in number of bits.
 const cpuWordSize = 64
 
-// irBasicType returns the IR type of the given Go basic type.
+// irBasicType returns the LLVM IR type corresponding to the given Go basic
+// type.
 func (gen *Generator) irBasicType(goType *gotypes.Basic) types.Type {
-	// predeclared types
 	switch goType.Kind() {
+	// predeclared types
 	case gotypes.Bool:
 		return types.I1
 	case gotypes.Int, gotypes.Uint:
@@ -50,68 +52,63 @@ func (gen *Generator) irBasicType(goType *gotypes.Basic) types.Type {
 	case gotypes.Float64:
 		return types.Double
 	case gotypes.Complex64:
-		var (
-			realType    = types.Float
-			complexType = types.Float
+		return types.NewStruct(
+			types.Float, // real
+			types.Float, // imag
 		)
-		return types.NewStruct(realType, complexType)
 	case gotypes.Complex128:
-		var (
-			realType    = types.Double
-			complexType = types.Double
+		return types.NewStruct(
+			types.Double, // real
+			types.Double, // imag
 		)
-		return types.NewStruct(realType, complexType)
 	case gotypes.String:
-		var (
-			dataType = types.NewPointer(types.I8)
-			lenType  = types.I64
+		return types.NewStruct(
+			types.NewPointer(types.I8), // data
+			types.I64,                  // len
 		)
-		return types.NewStruct(dataType, lenType)
 	case gotypes.UnsafePointer:
 		return types.NewInt(cpuWordSize)
 	// types for untyped values
 	case gotypes.UntypedBool:
 		return types.I1
 	case gotypes.UntypedInt:
-		untypedInt := types.NewInt(64)
-		untypedInt.SetName("untyped_int")
-		gen.new.typeDefs["untyped_int"] = untypedInt
-		return untypedInt
+		t := types.NewInt(64)
+		t.SetName("untyped_int")
+		gen.new.typeDefs["untyped_int"] = t
+		return t
 	case gotypes.UntypedRune:
-		untypedRune := types.NewInt(32)
-		untypedRune.SetName("untyped_rune")
-		gen.new.typeDefs["untyped_rune"] = untypedRune
-		return untypedRune
+		t := types.NewInt(32)
+		t.SetName("untyped_rune")
+		gen.new.typeDefs["untyped_rune"] = t
+		return t
 	case gotypes.UntypedFloat:
-		untypedFloat := &types.FloatType{Kind: types.FloatKindDouble}
-		untypedFloat.SetName("untyped_float")
-		gen.new.typeDefs["untyped_float"] = untypedFloat
-		return untypedFloat
+		t := &types.FloatType{Kind: types.FloatKindDouble}
+		t.SetName("untyped_float")
+		gen.new.typeDefs["untyped_float"] = t
+		return t
 	case gotypes.UntypedComplex:
 		untypedFloat := &types.FloatType{Kind: types.FloatKindDouble}
 		untypedFloat.SetName("untyped_float")
-		var (
-			realType    = untypedFloat
-			complexType = untypedFloat
+		t := types.NewStruct(
+			untypedFloat, // real
+			untypedFloat, // imag
 		)
-		untypedComplex := types.NewStruct(realType, complexType)
-		untypedComplex.SetName("untyped_complex")
-		gen.new.typeDefs["untyped_complex"] = untypedComplex
-		return untypedComplex
+		t.SetName("untyped_complex")
+		gen.new.typeDefs["untyped_complex"] = t
+		return t
 	case gotypes.UntypedString:
-		var (
-			dataType = types.NewPointer(types.I8)
-			lenType  = types.I64
+		t := types.NewStruct(
+			types.NewPointer(types.I8), // data
+			types.I64,                  // len
 		)
-		untypedString := types.NewStruct(dataType, lenType)
-		untypedString.SetName("untyped_string")
-		gen.new.typeDefs["untyped_string"] = untypedString
-		return untypedString
+		t.SetName("untyped_string")
+		gen.new.typeDefs["untyped_string"] = t
+		return t
 	case gotypes.UntypedNil:
-		untypedNil := types.NewPointer(types.I8)
-		untypedNil.SetName("untyped_nil")
-		gen.new.typeDefs["untyped_nil"] = untypedNil
-		return untypedNil
+		t := types.NewPointer(types.I8)
+		t.SetName("untyped_nil")
+		gen.new.typeDefs["untyped_nil"] = t
+		return t
 	default:
 		panic(fmt.Errorf("support for basic type of kind %v not yet implemented", goType.Kind()))
 	}

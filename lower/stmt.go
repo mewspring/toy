@@ -4,30 +4,25 @@ import (
 	"fmt"
 	"go/ast"
 
-	"github.com/llir/llvm/ir/value"
 	"github.com/mewspring/toy/irgen"
 )
 
 // lowerStmt lowers the Go statement to LLVM IR, emitting to f.
-func (fgen *funcGen) lowerStmt(old ast.Stmt) {
-	switch old := old.(type) {
+func (fgen *funcGen) lowerStmt(goStmt ast.Stmt) {
+	switch goStmt := goStmt.(type) {
 	case *ast.ReturnStmt:
-		fgen.lowerReturnStmt(old)
+		fgen.lowerReturnStmt(goStmt)
 	default:
-		panic(fmt.Errorf("support for statement %T not yet implemented", old))
+		panic(fmt.Errorf("support for statement %T not yet implemented", goStmt))
 	}
 }
 
 // lowerReturnStmt lowers the Go return statement to LLVM IR, emitting to f.
-func (fgen *funcGen) lowerReturnStmt(old *ast.ReturnStmt) {
-	var results []value.Value
-	for _, oldResult := range old.Results {
-		result, err := fgen.lowerExpr(oldResult)
-		if err != nil {
-			fgen.gen.eh(err)
-			return
-		}
-		results = append(results, result)
+func (fgen *funcGen) lowerReturnStmt(goStmt *ast.ReturnStmt) {
+	results, err := fgen.lowerExprs(goStmt.Results)
+	if err != nil {
+		fgen.gen.eh(err)
+		return
 	}
 	switch len(results) {
 	case 0:
@@ -35,8 +30,7 @@ func (fgen *funcGen) lowerReturnStmt(old *ast.ReturnStmt) {
 		fgen.cur.NewRet(nil)
 	case 1:
 		// single return value.
-		x := results[0]
-		fgen.cur.NewRet(x)
+		fgen.cur.NewRet(results[0])
 	default:
 		// multiple return values.
 		irgen.NewAggregateRet(fgen.cur, results...)

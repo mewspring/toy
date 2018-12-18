@@ -19,6 +19,17 @@ func (fgen *funcGen) lowerExpr(old ast.Expr) (value.Value, error) {
 		return fgen.lowerBasicLit(old), nil
 	case *ast.BinaryExpr:
 		return fgen.lowerBinaryExpr(old)
+	case *ast.CallExpr:
+		return fgen.lowerCallExpr(old)
+	case *ast.Ident:
+		name := old.String()
+		if f, ok := fgen.gen.new.funcs[name]; ok {
+			return f, nil
+		}
+		if v, ok := fgen.gen.new.globals[name]; ok {
+			return v, nil
+		}
+		return nil, errors.Errorf("unable to locate top-level definition of identifier %q", name)
 	default:
 		panic(fmt.Errorf("support for expression %T not yet implemented", old))
 	}
@@ -192,7 +203,34 @@ func (fgen *funcGen) lowerBinaryExpr(old *ast.BinaryExpr) (value.Value, error) {
 	}
 }
 
+// lowerCallExpr lowers the Go call expression to LLVM IR, emitting to f.
+func (fgen *funcGen) lowerCallExpr(old *ast.CallExpr) (value.Value, error) {
+	args, err := fgen.lowerExprs(old.Args)
+	if err != nil {
+		return nil, errors.WithStack(err)
+	}
+	// TODO: handle old.Ellipsis.
+	callee, err := fgen.lowerExpr(old.Fun)
+	if err != nil {
+		return nil, errors.WithStack(err)
+	}
+	return fgen.cur.NewCall(callee, args...), nil
+}
+
 // ### [ Helper functions ] ####################################################
+
+// lowerExprs lowers the given Go expressions to LLVM IR, emitting to f.
+func (fgen *funcGen) lowerExprs(oldExprs []ast.Expr) ([]value.Value, error) {
+	var vs []value.Value
+	for _, oldExpr := range oldExprs {
+		v, err := fgen.lowerExpr(oldExpr)
+		if err != nil {
+			return nil, errors.WithStack(err)
+		}
+		vs = append(vs, v)
+	}
+	return vs, nil
+}
 
 // isIntOrIntVectorType reports whether the given type is an integer scalar or
 // integer vector type.

@@ -22,14 +22,27 @@ func (gen *Generator) lowerBasicLit(old *ast.BasicLit) constant.Constant {
 		}
 		t, ok := typ.(*types.IntType)
 		if !ok {
-			panic(fmt.Errorf("support for type %T not yet implemented", old))
+			panic(fmt.Errorf("invalid type of integer literal; expected *types.IntType, got %T", t))
 		}
 		x, err := constant.NewIntFromString(t, old.Value)
 		if err != nil {
 			panic(fmt.Errorf("unable to parse integer literal %q; %v", old.Value, err))
 		}
 		return x
-	//case token.FLOAT:
+	case token.FLOAT:
+		typ, err := gen.irTypeOf(old)
+		if err != nil {
+			panic(fmt.Errorf("unable to locate type of expresion `%v`; %v", old, err))
+		}
+		t, ok := typ.(*types.FloatType)
+		if !ok {
+			panic(fmt.Errorf("invalid type of integer literal; expected *types.FloatType, got %T", t))
+		}
+		x, err := constant.NewFloatFromString(t, old.Value)
+		if err != nil {
+			panic(fmt.Errorf("unable to parse floating-point literal %q; %v", old.Value, err))
+		}
+		return x
 	//case token.IMAG:
 	//case token.CHAR:
 	//case token.STRING:

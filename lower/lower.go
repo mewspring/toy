@@ -6,12 +6,13 @@ import (
 	"go/ast"
 
 	"github.com/llir/llvm/ir"
-	"github.com/llir/llvm/ir/types"
 	"github.com/rickypai/natsort"
 )
 
 // Lower lowers the source code of the Go package to LLVM IR.
 func (gen *Generator) Lower() *ir.Module {
+	// Index top-level declarations.
+	gen.indexPackage()
 	// Lower Go package to LLVM IR.
 	gen.lowerPackage()
 	// Append type definitions to module.
@@ -34,7 +35,7 @@ func (gen *Generator) lowerPackage() {
 	}
 }
 
-// lowerFile lowers the Go file to LLVM IR, emitting to m.
+// lowerFile lowers the Go source file to LLVM IR, emitting to m.
 func (gen *Generator) lowerFile(file *ast.File) {
 	// Lower top-level declarations.
 	for _, goDecl := range file.Decls {
@@ -60,59 +61,25 @@ func (gen *Generator) lowerDecl(goDecl ast.Decl) {
 
 // lowerFuncDecl lowers the Go function declaration to LLVM IR, emitting to m.
 func (gen *Generator) lowerFuncDecl(goFuncDecl *ast.FuncDecl) {
-	// Create LLVM IR function generator.
-	fgen := gen.newFuncGen()
-	funcName := goFuncDecl.Name.String()
-	// Function scope.
-	fgen.scope = gen.scope.Innermost(goFuncDecl.Name.Pos())
-	// Receiver.
-	receivers := gen.irParams(goFuncDecl.Recv)
-	// Function parameters.
-	params := gen.irParams(goFuncDecl.Type.Params)
-	// Add reciver to function parameters if present.
-	switch len(receivers) {
-	case 0:
-		// nothing to do.
-	case 1:
-		// To avoid function name collisions, rename "M" to "T.M".
-		recvType := receivers[0].Typ
-		funcName = fmt.Sprintf("%s.%s", recvType.Name(), funcName)
-		// Prepend receiver as first parameter of function.
-		params = append(receivers, params...)
-	default:
-		panic(fmt.Errorf("support for multiple receivers not yet implemented; %q has %d receivers", funcName, len(receivers)))
-	}
-	// Return type.
-	results := gen.irParams(goFuncDecl.Type.Results)
-	var retType types.Type
-	switch len(results) {
-	case 0:
-		// void return.
-		retType = types.Void
-	case 1:
-		// single value return.
-		retType = results[0].Typ
-	default:
-		// multiple value return.
-		var resultTypes []types.Type
-		for _, result := range results {
-			resultTypes = append(resultTypes, result.Typ)
-		}
-		retType = types.NewStruct(resultTypes...)
-	}
-	// Add function.
-	f := gen.m.NewFunc(funcName, retType, params...)
-	fgen.f = f
-	if prev, ok := gen.funcs[funcName]; ok {
-		gen.Errorf("function %q already present; prev `%v`, new `%v`", funcName, prev, f)
+	if goFuncDecl.Body == nil {
+		// Function declaration.
 		return
 	}
-	gen.funcs[funcName] = f
-	// Lower function body.
-	if goFuncDecl.Body != nil {
-		fgen.cur = fgen.f.NewBlock("entry")
-		fgen.lowerStmt(goFuncDecl.Body)
+	// Locate function definition.
+	funcName := goFuncDecl.Name.String()
+	f, ok := gen.funcs[funcName]
+	if !ok {
+		gen.Errorf("unable to locate function definition %q", funcName)
+		return
 	}
+	// Create LLVM IR function generator.
+	fgen := gen.newFuncGen()
+	fgen.f = f
+	// Function scope.
+	fgen.scope = gen.scope.Innermost(goFuncDecl.Name.Pos())
+	// Lower function body.
+	fgen.cur = fgen.f.NewBlock("entry")
+	fgen.lowerStmt(goFuncDecl.Body)
 }
 
 // --- [ Generic declarations ] ------------------------------------------------
@@ -153,26 +120,23 @@ func (gen *Generator) lowerTypeSpec(goSpec *ast.TypeSpec) {
 // lowerValueSpec lowers the Go value specifier to LLVM IR, emitting to m.
 func (gen *Generator) lowerValueSpec(goSpec *ast.ValueSpec) {
 	for i, goName := range goSpec.Names {
-		name := goName.String()
-		if len(goSpec.Values) > 0 {
-			// Global variable definition.
-			goExpr := goSpec.Values[i]
-			init, err := gen.lowerGlobalInitExpr(goExpr)
-			if err != nil {
-				gen.eh(err)
-				continue
-			}
-			v := gen.m.NewGlobalDef(name, init)
-			gen.globals[name] = v
-		} else {
+		if len(goSpec.Values) == 0 {
 			// Global variable declaration.
-			typ, err := gen.irTypeOf(goSpec.Type)
-			if err != nil {
-				gen.eh(err)
-				continue
-			}
-			v := gen.m.NewGlobalDecl(name, typ)
-			gen.globals[name] = v
+			continue
 		}
+		// Global variable definition.
+		name := goName.String()
+		v, ok := gen.globals[name]
+		if !ok {
+			gen.Errorf("unable to locate global variable definition %q", name)
+			return
+		}
+		goExpr := goSpec.Values[i]
+		init, err := gen.lowerGlobalInitExpr(goExpr)
+		if err != nil {
+			gen.eh(err)
+			continue
+		}
+		v.Init = init
 	}
 }

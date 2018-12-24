@@ -120,7 +120,7 @@ func (gen *Generator) indexSpec(goSpec ast.Spec) {
 	}
 }
 
-// indexTypeSpec indexes the global identifier and creates a scaffolding IR
+// indexValueSpec indexes the global identifier and creates a scaffolding IR
 // global variable declaration or definition of the Go value specifier.
 func (gen *Generator) indexValueSpec(goSpec *ast.ValueSpec) {
 	for _, goName := range goSpec.Names {
